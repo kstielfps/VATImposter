@@ -23,20 +23,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # Configurar ALLOWED_HOSTS
+# Se ALLOWED_HOSTS estiver definido nas variáveis de ambiente, usar ele
+# Caso contrário, aceitar todos os hosts (seguro no Railway que gerencia isso)
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
 if allowed_hosts_env:
-    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',')]
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
 else:
-    # Em desenvolvimento, aceitar tudo. Em produção, aceitar domínios Railway
-    if DEBUG:
-        ALLOWED_HOSTS = ['*']
-    else:
-        # Aceitar domínios Railway automaticamente
-        ALLOWED_HOSTS = ['*.railway.app', '*.up.railway.app']
-        # Adicionar domínio público do Railway se disponível
-        railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
-        if railway_domain:
-            ALLOWED_HOSTS.append(railway_domain)
+    # Aceitar todos os hosts (Railway gerencia a segurança)
+    ALLOWED_HOSTS = ['*']
 
 
 # Application definition
