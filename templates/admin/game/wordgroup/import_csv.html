@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}Importar Palavras via CSV | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='game' %}">Game</a>
+&rsaquo; <a href="{% url 'admin:game_wordgroup_changelist' %}">Grupos de Palavras</a>
+&rsaquo; Importar CSV
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Importar Palavras via CSV</h1>
+
+<div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+    <h2>📋 Formato do CSV</h2>
+    <p><strong>Cada linha do CSV representa um grupo de palavras.</strong></p>
+    <p>As palavras na mesma linha serão agrupadas juntas.</p>
+    
+    <h3>Exemplo:</h3>
+    <pre style="background: white; padding: 15px; border-radius: 3px; overflow-x: auto;">
+Frutas,Abacaxi,Manga,Banana,Laranja
+Animais,Cachorro,Gato,Passarinho,Peixe
+Comida,Pizza,Hambúrguer,Sushi,Salada
+    </pre>
+    
+    <p><strong>Nota:</strong> Cada linha precisa ter pelo menos 2 palavras.</p>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    
+    <fieldset class="module aligned">
+        <div class="form-row">
+            <div>
+                <label for="{{ form.csv_file.id_for_label }}">{{ form.csv_file.label }}:</label>
+                {{ form.csv_file }}
+                {% if form.csv_file.help_text %}
+                    <p class="help">{{ form.csv_file.help_text }}</p>
+                {% endif %}
+                {% if form.csv_file.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.csv_file.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+    </fieldset>
+    
+    <div class="submit-row">
+        <input type="submit" value="Importar CSV" class="default" name="_save">
+        <a href="{% url 'admin:game_wordgroup_changelist' %}" class="button">Cancelar</a>
+    </div>
+</form>
+
+{% endblock %}
+
