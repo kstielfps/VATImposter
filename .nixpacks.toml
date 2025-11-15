@@ -7,6 +7,11 @@ cmds = [
   "python manage.py collectstatic --noinput"
 ]
 
+[phases.build]
+cmds = [
+  "python manage.py migrate --noinput"
+]
+
 [start]
 cmd = "daphne -b 0.0.0.0 -p $PORT vatimposter.asgi:application"
 
