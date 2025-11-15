@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "daphne -b 0.0.0.0 -p $PORT vatimposter.asgi:application"
+startCommand = "python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT vatimposter.asgi:application"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
