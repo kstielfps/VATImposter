@@ -8,12 +8,17 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 """
 
 import os
-from django.core.asgi import get_asgi_application
+import django
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-import game.routing
 
+# Configurar Django antes de importar qualquer coisa que dependa dele
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'vatimposter.settings')
+django.setup()
+
+# Agora podemos importar após configurar Django
+from django.core.asgi import get_asgi_application
+import game.routing
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
