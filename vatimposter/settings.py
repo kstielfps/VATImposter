@@ -36,6 +36,25 @@ if allowed_hosts_env and allowed_hosts_env != '' and allowed_hosts_env != '*':
     if hosts_list:
         ALLOWED_HOSTS = hosts_list
 
+# Configurações de CSRF para Railway (HTTPS)
+# Railway usa proxy reverso, então precisamos confiar nos headers
+CSRF_TRUSTED_ORIGINS = []
+csrf_origins_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip()
+if csrf_origins_env:
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(',') if origin.strip()]
+else:
+    # Se não definido, aceitar qualquer origem (Railway gerencia a segurança)
+    # Em produção, você deve definir CSRF_TRUSTED_ORIGINS explicitamente
+    CSRF_TRUSTED_ORIGINS = ['*'] if settings.DEBUG else []
+
+# Railway usa proxy reverso, então precisamos confiar nos headers de segurança
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_TLS = os.environ.get('USE_TLS', 'True') == 'True'
+if USE_TLS:
+    SECURE_SSL_REDIRECT = False  # Railway já gerencia HTTPS
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
