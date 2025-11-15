@@ -23,11 +23,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # Configurar ALLOWED_HOSTS
-# Se ALLOWED_HOSTS estiver definido nas variáveis de ambiente, usar ele
+# Se ALLOWED_HOSTS estiver definido nas variáveis de ambiente e não estiver vazio, usar ele
 # Caso contrário, aceitar todos os hosts (seguro no Railway que gerencia isso)
-allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
-if allowed_hosts_env:
+allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '').strip()
+if allowed_hosts_env and allowed_hosts_env != '':
     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
+    # Se após processar estiver vazio, aceitar todos
+    if not ALLOWED_HOSTS:
+        ALLOWED_HOSTS = ['*']
 else:
     # Aceitar todos os hosts (Railway gerencia a segurança)
     ALLOWED_HOSTS = ['*']
