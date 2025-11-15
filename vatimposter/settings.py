@@ -43,9 +43,9 @@ csrf_origins_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip()
 if csrf_origins_env:
     CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(',') if origin.strip()]
 else:
-    # Se não definido, aceitar qualquer origem (Railway gerencia a segurança)
-    # Em produção, você deve definir CSRF_TRUSTED_ORIGINS explicitamente
-    CSRF_TRUSTED_ORIGINS = ['*'] if settings.DEBUG else []
+    # Se não definido, aceitar domínios Railway por padrão
+    # Railway usa domínios *.railway.app
+    CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app']
 
 # Railway usa proxy reverso, então precisamos confiar nos headers de segurança
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
