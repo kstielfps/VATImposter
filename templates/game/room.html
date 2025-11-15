@@ -89,14 +89,6 @@
         color: white;
     }
     
-    .timer {
-        font-size: 24px;
-        font-weight: bold;
-        color: #f5576c;
-        text-align: center;
-        margin: 10px 0;
-    }
-    
     .word-display {
         padding: 15px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -168,7 +160,6 @@
                 <div id="hints-list" class="hints-list"></div>
                 
                 <div id="hint-input-section" style="display: none;">
-                    <div class="timer" id="timer">30</div>
                     <div class="hint-input">
                         <label>Digite uma palavra (dica):</label>
                         <input type="text" id="hint-word" placeholder="Digite uma palavra" maxlength="50">
@@ -204,8 +195,6 @@
 const gameCode = '{{ game.code }}';
 const playerName = '{{ player.name|default:"" }}';
 let ws = null;
-let hintTimer = null;
-let timeLeft = 30;
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -351,11 +340,9 @@ function updateGameState(state) {
         const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);
         if (currentPlayer) {
             hintInputSection.style.display = 'block';
-            startHintTimer();
         }
     } else {
         hintInputSection.style.display = 'none';
-        stopHintTimer();
     }
     
     // Gerenciar votação
@@ -472,34 +459,6 @@ function updateGameState(state) {
     }
 }
 
-function startHintTimer() {
-    timeLeft = 30;
-    updateTimer();
-    hintTimer = setInterval(() => {
-        timeLeft--;
-        updateTimer();
-        if (timeLeft <= 0) {
-            stopHintTimer();
-            // Enviar uma dica vazia ou sinalizar timeout
-            // O backend pode tratar isso como eliminação
-            alert('Tempo esgotado! Você foi eliminado por não dar dica a tempo.');
-            // Nota: A eliminação por timeout pode ser implementada no backend
-            // Por enquanto, apenas mostra o alerta
-        }
-    }, 1000);
-}
-
-function stopHintTimer() {
-    if (hintTimer) {
-        clearInterval(hintTimer);
-        hintTimer = null;
-    }
-}
-
-function updateTimer() {
-    document.getElementById('timer').textContent = timeLeft;
-}
-
 function getStatusText(status) {
     const statusMap = {
         'waiting': 'Aguardando Jogadores',
@@ -538,7 +497,6 @@ if (playerName) {
                 word: word
             });
             document.getElementById('hint-word').value = '';
-            stopHintTimer();
         }
     });
     
