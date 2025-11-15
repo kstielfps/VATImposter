@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Criar Admin - VAT Imposter{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>🔐 Criar Superusuário Admin</h1>
+    
+    <div id="result-message" style="display: none; padding: 15px; margin: 15px 0; border-radius: 5px;"></div>
+    
+    <form id="admin-form">
+        <label for="token">Token de Segurança:</label>
+        <input type="text" id="token" name="token" required placeholder="Token de segurança" 
+               value="{{ request.GET.token|default:'' }}">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            Token padrão: railway-admin-2024 (ou defina ADMIN_CREATE_TOKEN nas variáveis de ambiente)
+        </small>
+        
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required placeholder="admin" value="admin">
+        
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" placeholder="admin@example.com" value="admin@example.com">
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required placeholder="Mínimo 8 caracteres" minlength="8">
+        
+        <button type="submit" class="btn" style="width: 100%; margin-top: 20px;">
+            Criar Superusuário
+        </button>
+    </form>
+    
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="{% url 'home' %}" class="btn btn-secondary">← Voltar</a>
+    </div>
+</div>
+
+<script>
+document.getElementById('admin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        token: document.getElementById('token').value,
+        username: document.getElementById('username').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+    };
+    
+    const resultDiv = document.getElementById('result-message');
+    resultDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('{% url "create_admin_user" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        resultDiv.style.display = 'block';
+        
+        if (response.ok && data.success) {
+            resultDiv.style.backgroundColor = '#d4edda';
+            resultDiv.style.color = '#155724';
+            resultDiv.style.border = '1px solid #c3e6cb';
+            resultDiv.innerHTML = `
+                <strong>✓ Sucesso!</strong><br>
+                ${data.message}<br>
+                <strong>Username:</strong> ${data.username}<br>
+                <strong>Email:</strong> ${data.email}<br>
+                <a href="${data.admin_url}" style="color: #155724; text-decoration: underline;">Acessar Admin →</a>
+            `;
+            document.getElementById('admin-form').reset();
+        } else {
+            resultDiv.style.backgroundColor = '#f8d7da';
+            resultDiv.style.color = '#721c24';
+            resultDiv.style.border = '1px solid #f5c6cb';
+            resultDiv.innerHTML = `<strong>✗ Erro:</strong> ${data.error || 'Erro desconhecido'}`;
+        }
+    } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.backgroundColor = '#f8d7da';
+        resultDiv.style.color = '#721c24';
+        resultDiv.style.border = '1px solid #f5c6cb';
+        resultDiv.innerHTML = `<strong>✗ Erro de conexão:</strong> ${error.message}`;
+    }
+});
+</script>
+{% endblock %}
+

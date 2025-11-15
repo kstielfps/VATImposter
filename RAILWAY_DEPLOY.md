@@ -86,6 +86,37 @@ python manage.py createadmin --username admin --email admin@example.com --passwo
 - Procure por mensagens de erro (em vermelho)
 - Se houver erro 500 ao criar sala, os logs mostrarão o erro específico
 
+### 6. Criar Usuário Admin
+
+Após as migrações serem executadas, você precisa criar um superusuário para acessar o Django Admin:
+
+1. No serviço Django, vá em **"Deployments"** → clique no deployment mais recente
+2. Clique em **"Shell"** ou **"Run Command"**
+3. Execute o comando para criar o admin:
+
+**Opção 1: Comando interativo (recomendado)**
+```bash
+python manage.py createadmin
+```
+O comando pedirá:
+- Username (ou pressione Enter para usar 'admin')
+- Email (opcional)
+- Password (será solicitado duas vezes)
+
+**Opção 2: Comando não-interativo (com argumentos)**
+```bash
+python manage.py createadmin --username admin --email admin@example.com --password SuaSenhaSegura123
+```
+
+**Opção 3: Usar o comando padrão do Django**
+```bash
+python manage.py createsuperuser
+```
+
+Após criar o admin, você pode acessar:
+- `https://seu-app.railway.app/admin/`
+- Faça login com o username e password que você criou
+
 ### 6. Configurar Domínio (Opcional)
 
 1. No dashboard, vá em **"Settings"** → **"Networking"**

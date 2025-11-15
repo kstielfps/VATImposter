@@ -1,11 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.contrib.auth import get_user_model
 import json
 import traceback
 from .models import Game, Player
+
+User = get_user_model()
 
 
 def home(request):
@@ -137,6 +140,90 @@ def game_room(request, code):
     }
     
     return render(request, 'game/room.html', context)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def create_admin_user(request):
+    """
+    View para criar um superusuário via HTTP.
+    Protegido por token simples ou apenas em DEBUG mode.
+    Use: /create-admin/?token=YOUR_TOKEN&username=admin&password=senha123&email=admin@example.com
+    Ou acesse /create-admin/ para ver o formulário (se DEBUG=True)
+    """
+    # Se for GET e DEBUG=True, mostrar formulário
+    if request.method == 'GET' and settings.DEBUG:
+        return render(request, 'game/create_admin.html')
+    
+    # Verificar token (pode ser definido como variável de ambiente)
+    admin_token = os.environ.get('ADMIN_CREATE_TOKEN', 'railway-admin-2024')
+    
+    # Obter token dos parâmetros
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+            token = data.get('token')
+            username = data.get('username', 'admin')
+            password = data.get('password', 'admin123')
+            email = data.get('email', 'admin@example.com')
+        except:
+            token = request.POST.get('token')
+            username = request.POST.get('username', 'admin')
+            password = request.POST.get('password', 'admin123')
+            email = request.POST.get('email', 'admin@example.com')
+    else:
+        token = request.GET.get('token')
+        username = request.GET.get('username', 'admin')
+        password = request.GET.get('password', 'admin123')
+        email = request.GET.get('email', 'admin@example.com')
+    
+    # Permitir apenas se token correto OU se DEBUG=True
+    if not settings.DEBUG and token != admin_token:
+        return JsonResponse({
+            'error': 'Token inválido ou acesso negado',
+            'hint': 'Defina ADMIN_CREATE_TOKEN nas variáveis de ambiente ou use DEBUG=True'
+        }, status=403)
+    
+    # Validações básicas
+    if not username:
+        return JsonResponse({'error': 'Username é obrigatório'}, status=400)
+    
+    if not password:
+        return JsonResponse({'error': 'Password é obrigatório'}, status=400)
+    
+    if len(password) < 8:
+        return JsonResponse({'error': 'Password deve ter pelo menos 8 caracteres'}, status=400)
+    
+    # Verificar se o usuário já existe
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({
+            'error': f'Usuário "{username}" já existe',
+            'exists': True
+        }, status=400)
+    
+    # Criar superusuário
+    try:
+        User.objects.create_superuser(
+            username=username,
+            email=email,
+            password=password
+        )
+        return JsonResponse({
+            'success': True,
+            'message': f'Superusuário "{username}" criado com sucesso!',
+            'username': username,
+            'email': email,
+            'admin_url': '/admin/'
+        })
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        logger = logging.getLogger(__name__)
+        logger.error(f"Erro ao criar admin: {str(e)}\n{error_trace}")
+        
+        return JsonResponse({
+            'error': f'Erro ao criar superusuário: {str(e)}',
+            'trace': error_trace if settings.DEBUG else None
+        }, status=500)
 
 
 
