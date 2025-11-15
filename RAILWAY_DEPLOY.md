@@ -30,23 +30,18 @@ Este guia vai te ajudar a fazer deploy do VAT Imposter no Railway.
 
 ### 3. Configurar Variáveis de Ambiente
 
-No seu serviço Django, vá em **"Variables"** e adicione:
+**IMPORTANTE**: O código agora usa automaticamente as variáveis do Railway PostgreSQL (`PGDATABASE`, `PGUSER`, etc.), então você NÃO precisa configurar variáveis de banco de dados manualmente!
 
-**Variáveis do Banco de Dados** (Railway já cria automaticamente, mas vamos mapear):
-```
-DB_NAME=${{Postgres.PGDATABASE}}
-DB_USER=${{Postgres.PGUSER}}
-DB_PASSWORD=${{Postgres.PGPASSWORD}}
-DB_HOST=${{Postgres.PGHOST}}
-DB_PORT=${{Postgres.PGPORT}}
-```
+No seu serviço Django, vá em **"Variables"** e adicione apenas:
 
-**Variáveis Django**:
+**Variáveis Django** (obrigatórias):
 ```
 SECRET_KEY=<gere uma chave secreta forte>
 DEBUG=False
-ALLOWED_HOSTS=seu-app.railway.app,*.railway.app
+ALLOWED_HOSTS=*
 ```
+
+**Variáveis do Banco de Dados**: NÃO são necessárias! O código detecta automaticamente as variáveis `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT` que o Railway cria automaticamente quando você adiciona o serviço PostgreSQL.
 
 **Para gerar SECRET_KEY**:
 ```bash
