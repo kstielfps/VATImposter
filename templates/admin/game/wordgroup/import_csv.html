@@ -16,9 +16,9 @@
 <h1>Importar Palavras via CSV</h1>
 
 <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
-    <h2>📋 Formato do CSV</h2>
-    <p><strong>Cada linha do CSV representa um grupo de palavras.</strong></p>
-    <p>As palavras na mesma linha serão agrupadas juntas.</p>
+    <h2>📋 Formato</h2>
+    <p><strong>Cada linha representa um grupo de palavras.</strong></p>
+    <p>As palavras na mesma linha são separadas por vírgula e serão agrupadas juntas.</p>
     
     <h3>Exemplo:</h3>
     <pre style="background: white; padding: 15px; border-radius: 3px; overflow-x: auto;">
@@ -33,7 +33,16 @@ Comida,Pizza,Hambúrguer,Sushi,Salada
 <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     
+    {% if form.non_field_errors %}
+        <ul class="errorlist">
+            {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    
     <fieldset class="module aligned">
+        <h2 style="margin-top: 0;">Opção 1: Upload de Arquivo CSV</h2>
         <div class="form-row">
             <div>
                 <label for="{{ form.csv_file.id_for_label }}">{{ form.csv_file.label }}:</label>
@@ -44,6 +53,26 @@ Comida,Pizza,Hambúrguer,Sushi,Salada
                 {% if form.csv_file.errors %}
                     <ul class="errorlist">
                         {% for error in form.csv_file.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+    </fieldset>
+    
+    <fieldset class="module aligned" style="margin-top: 30px;">
+        <h2>Opção 2: Colar Texto Diretamente</h2>
+        <div class="form-row">
+            <div>
+                <label for="{{ form.csv_text.id_for_label }}">{{ form.csv_text.label }}:</label>
+                {{ form.csv_text }}
+                {% if form.csv_text.help_text %}
+                    <p class="help">{{ form.csv_text.help_text }}</p>
+                {% endif %}
+                {% if form.csv_text.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.csv_text.errors %}
                             <li>{{ error }}</li>
                         {% endfor %}
                     </ul>

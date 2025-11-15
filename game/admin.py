@@ -36,13 +36,32 @@ class WordGroupAdmin(admin.ModelAdmin):
         if request.method == 'POST':
             form = CSVImportForm(request.POST, request.FILES)
             if form.is_valid():
-                csv_file = form.cleaned_data['csv_file']
+                csv_file = form.cleaned_data.get('csv_file')
+                csv_text = form.cleaned_data.get('csv_text', '').strip()
                 
-                # Ler o arquivo CSV
+                # Determinar fonte dos dados
+                if csv_file:
+                    # Ler do arquivo
+                    try:
+                        file_data = csv_file.read().decode('utf-8')
+                        data_source = file_data
+                    except Exception as e:
+                        messages.error(request, f'Erro ao ler arquivo: {str(e)}')
+                        form = CSVImportForm()
+                        context = {
+                            'form': form,
+                            'opts': self.model._meta,
+                            'has_view_permission': self.has_view_permission(request),
+                        }
+                        return render(request, 'admin/game/wordgroup/import_csv.html', context)
+                else:
+                    # Usar texto colado
+                    data_source = csv_text
+                
+                # Processar dados
                 try:
-                    # Decodificar o arquivo
-                    file_data = csv_file.read().decode('utf-8')
-                    csv_reader = csv.reader(io.StringIO(file_data))
+                    # Criar um StringIO para o csv.reader
+                    csv_reader = csv.reader(io.StringIO(data_source))
                     
                     groups_created = 0
                     words_created = 0
@@ -93,10 +112,10 @@ class WordGroupAdmin(admin.ModelAdmin):
                         for error in errors:
                             messages.warning(request, error)
                     
-                    return redirect('..')
+                    return redirect('admin:game_wordgroup_changelist')
                     
                 except Exception as e:
-                    messages.error(request, f'Erro ao processar arquivo CSV: {str(e)}')
+                    messages.error(request, f'Erro ao processar dados: {str(e)}')
         else:
             form = CSVImportForm()
         
