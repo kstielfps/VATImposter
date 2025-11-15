@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block title %}Criar Sala - VAT Imposter{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>➕ Criar Nova Sala</h1>
+    
+    <div id="error-message" class="error" style="display: none;"></div>
+    
+    <form id="create-form">
+        <label for="creator_name">Seu Nome:</label>
+        <input type="text" id="creator_name" name="creator_name" required placeholder="Digite seu nome">
+        
+        <label for="num_impostors">Número de Impostores (1-2):</label>
+        <select id="num_impostors" name="num_impostors" required>
+            <option value="1" selected>1 Impostor</option>
+            <option value="2">2 Impostores</option>
+        </select>
+        
+        <label for="num_whitemen">Número de WhiteMen (0-2):</label>
+        <select id="num_whitemen" name="num_whitemen" required>
+            <option value="0" selected>0 WhiteMen</option>
+            <option value="1">1 WhiteMan</option>
+            <option value="2">2 WhiteMen</option>
+        </select>
+        
+        <button type="submit" class="btn" style="width: 100%;">Criar Sala</button>
+    </form>
+    
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="{% url 'home' %}" class="btn btn-secondary">← Voltar</a>
+    </div>
+</div>
+
+<script>
+document.getElementById('create-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        creator_name: document.getElementById('creator_name').value,
+        num_impostors: document.getElementById('num_impostors').value,
+        num_whitemen: document.getElementById('num_whitemen').value,
+    };
+    
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('{% url "create_game" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            window.location.href = data.redirect + '?name=' + encodeURIComponent(formData.creator_name);
+        } else {
+            errorDiv.textContent = data.error || 'Erro ao criar sala';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Erro de conexão. Tente novamente.';
+        errorDiv.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}
+
+
+

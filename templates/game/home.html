@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}VAT Imposter - Início{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>🎮 VAT Imposter</h1>
+    <p style="text-align: center; margin-bottom: 30px; font-size: 18px;">
+        Descubra quem é o impostor através das dicas!
+    </p>
+    
+    <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+        <a href="{% url 'create_game' %}" class="btn">
+            ➕ Criar Sala
+        </a>
+        <a href="{% url 'join_game' %}" class="btn btn-secondary">
+            🔑 Entrar com Código
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📖 Como Jogar</h2>
+    <ol style="line-height: 2; padding-left: 20px;">
+        <li><strong>Cidadãos:</strong> Recebem a palavra correta. Tentem descobrir quem é o impostor!</li>
+        <li><strong>Impostor:</strong> Recebe uma palavra diferente. Finge que conhece a palavra correta!</li>
+        <li><strong>WhiteMan:</strong> Não recebe palavra nenhuma. Tente sobreviver até o final!</li>
+        <li>Dê dicas sobre sua palavra (sem revelá-la!)</li>
+        <li>Vote em quem você acha que é o impostor</li>
+        <li>Cidadãos ganham se eliminarem todos os impostores</li>
+        <li>Impostor ganha se sobrar apenas 2 jogadores</li>
+    </ol>
+</div>
+{% endblock %}
+
+
+

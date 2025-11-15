@@ -1,0 +1,555 @@
+{% extends 'base.html' %}
+
+{% block title %}Sala {{ game.code }} - VAT Imposter{% endblock %}
+
+{% block extra_css %}
+<style>
+    .room-container {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 20px;
+    }
+    
+    @media (max-width: 768px) {
+        .room-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .players-list {
+        list-style: none;
+    }
+    
+    .player-item {
+        padding: 10px;
+        margin: 5px 0;
+        background: #f5f5f5;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .player-item.eliminated {
+        opacity: 0.5;
+        text-decoration: line-through;
+    }
+    
+    .player-item.creator::after {
+        content: " 👑";
+    }
+    
+    .game-status {
+        padding: 15px;
+        background: #e3f2fd;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .hint-input {
+        margin: 20px 0;
+    }
+    
+    .hints-list {
+        max-height: 400px;
+        overflow-y: auto;
+        margin-top: 20px;
+    }
+    
+    .hint-item {
+        padding: 10px;
+        margin: 5px 0;
+        background: #f9f9f9;
+        border-left: 4px solid #667eea;
+        border-radius: 4px;
+    }
+    
+    .voting-section {
+        margin-top: 20px;
+    }
+    
+    .vote-button {
+        width: 100%;
+        margin: 5px 0;
+        padding: 10px;
+        background: #fff;
+        border: 2px solid #667eea;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .vote-button:hover {
+        background: #667eea;
+        color: white;
+    }
+    
+    .vote-button.voted {
+        background: #667eea;
+        color: white;
+    }
+    
+    .timer {
+        font-size: 24px;
+        font-weight: bold;
+        color: #f5576c;
+        text-align: center;
+        margin: 10px 0;
+    }
+    
+    .word-display {
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 20px;
+        font-weight: bold;
+        margin: 20px 0;
+    }
+    
+    .role-display {
+        padding: 10px;
+        background: #fff3cd;
+        border-radius: 8px;
+        margin: 10px 0;
+        text-align: center;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Sala: {{ game.code }}</h1>
+    
+    {% if not player %}
+    <div class="error">
+        Você não está nesta sala. Por favor, entre com seu nome.
+    </div>
+    {% else %}
+    
+    <div class="room-container">
+        <div>
+            <div class="game-status">
+                <h3>Status: <span id="game-status">{{ game.get_status_display }}</span></h3>
+                <p>Rodada: <span id="current-round">{{ game.current_round }}</span></p>
+                <p>Jogadores: <span id="player-count">{{ game.players.count }}</span>/{{ game.max_players }}</p>
+            </div>
+            
+            <h3>Jogadores:</h3>
+            <ul class="players-list" id="players-list">
+                {% for p in players %}
+                <li class="player-item {% if p.is_creator %}creator{% endif %} {% if p.is_eliminated %}eliminated{% endif %}" data-player-id="{{ p.id }}">
+                    {{ p.name }}
+                    {% if p.is_eliminated %}<span style="color: red;">❌</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            
+            {% if player.is_creator and game.status == 'waiting' %}
+            <button id="start-btn" class="btn" style="width: 100%; margin-top: 20px;">
+                Iniciar Jogo
+            </button>
+            {% endif %}
+        </div>
+        
+        <div>
+            <div id="word-display" class="word-display" style="display: none;">
+                <div>Sua palavra: <span id="my-word"></span></div>
+            </div>
+            
+            <div id="role-display" class="role-display" style="display: none;">
+                Seu papel: <span id="my-role"></span>
+            </div>
+            
+            <div id="hints-section">
+                <h3>Dicas:</h3>
+                <div id="hints-list" class="hints-list"></div>
+                
+                <div id="hint-input-section" style="display: none;">
+                    <div class="timer" id="timer">30</div>
+                    <div class="hint-input">
+                        <label>Digite uma palavra (dica):</label>
+                        <input type="text" id="hint-word" placeholder="Digite uma palavra" maxlength="50">
+                        <button id="submit-hint" class="btn" style="width: 100%; margin-top: 10px;">Enviar Dica</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="voting-section" class="voting-section" style="display: none;">
+                <h3>Votação:</h3>
+                <p>Escolha quem você acha que é o impostor:</p>
+                <div id="vote-buttons"></div>
+            </div>
+            
+            <div id="results-section" style="display: none;">
+                <h3>Resultado do Jogo:</h3>
+                <div id="winner-message"></div>
+                <div id="roles-reveal"></div>
+                <div id="auto-delete-timer" style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px; text-align: center; display: none;">
+                    <strong style="color: #f5576c;">⏰ <span id="timer-text">A sala será fechada automaticamente em 60 segundos...</span></strong>
+                </div>
+                <div id="game-actions" style="margin-top: 20px; text-align: center;">
+                    <!-- Botões aparecerão aqui apenas para o criador -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% endif %}
+</div>
+
+<script>
+const gameCode = '{{ game.code }}';
+const playerName = '{{ player.name|default:"" }}';
+let ws = null;
+let hintTimer = null;
+let timeLeft = 30;
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/game/${gameCode}/`;
+    
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+        console.log('Conectado ao WebSocket');
+        sendMessage({ type: 'get_state' });
+    };
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleMessage(data);
+    };
+    
+    ws.onerror = (error) => {
+        console.error('Erro no WebSocket:', error);
+    };
+    
+    ws.onclose = () => {
+        console.log('Desconectado do WebSocket');
+        setTimeout(connectWebSocket, 3000);
+    };
+}
+
+function sendMessage(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+    }
+}
+
+let autoDeleteTimer = null;
+
+function handleMessage(data) {
+    if (data.type === 'game_state') {
+        updateGameState(data);
+    } else if (data.type === 'error') {
+        alert(data.message);
+    } else if (data.type === 'game_restarted') {
+        // Cancelar timer se existir
+        if (autoDeleteTimer) {
+            clearInterval(autoDeleteTimer);
+            autoDeleteTimer = null;
+        }
+        document.getElementById('auto-delete-timer').style.display = 'none';
+        alert(data.message || 'O jogo foi reiniciado!');
+        // Recarregar estado
+        sendMessage({ type: 'get_state' });
+    } else if (data.type === 'auto_delete_countdown') {
+        // Atualizar contador visual
+        const timerDiv = document.getElementById('auto-delete-timer');
+        const timerText = document.getElementById('timer-text');
+        if (timerDiv && timerText) {
+            timerDiv.style.display = 'block';
+            const seconds = data.seconds_remaining || 60;
+            timerText.textContent = `A sala será fechada automaticamente em ${seconds} segundos...`;
+            
+            // Mudar cor quando estiver acabando
+            if (seconds <= 10) {
+                timerDiv.style.background = '#fee';
+                timerText.style.color = '#c33';
+            } else if (seconds <= 30) {
+                timerDiv.style.background = '#fff3cd';
+                timerText.style.color = '#f5576c';
+            }
+        }
+    } else if (data.type === 'room_closed') {
+        // Cancelar timer se existir
+        if (autoDeleteTimer) {
+            clearInterval(autoDeleteTimer);
+            autoDeleteTimer = null;
+        }
+        alert(data.message || 'A sala foi fechada.');
+        if (data.redirect) {
+            setTimeout(() => {
+                window.location.href = data.redirect;
+            }, 1000);
+        }
+    }
+}
+
+function updateGameState(state) {
+    const game = state.game;
+    const players = state.players;
+    const hints = state.hints;
+    const votes = state.votes;
+    
+    // Atualizar status
+    document.getElementById('game-status').textContent = getStatusText(game.status);
+    document.getElementById('current-round').textContent = game.current_round;
+    document.getElementById('player-count').textContent = players.length;
+    
+    // Atualizar lista de jogadores
+    const playersList = document.getElementById('players-list');
+    playersList.innerHTML = players.map(p => {
+        let classes = 'player-item';
+        if (p.is_creator) classes += ' creator';
+        if (p.is_eliminated) classes += ' eliminated';
+        return `<li class="${classes}" data-player-id="${p.id}">
+            ${p.name}${p.is_eliminated ? ' <span style="color: red;">❌</span>' : ''}
+        </li>`;
+    }).join('');
+    
+    // Mostrar palavra e papel se o jogo começou
+    if (game.status !== 'waiting' && game.status !== 'configuring') {
+        const player = players.find(p => p.name === playerName);
+        if (player && player.role) {
+            const wordDisplay = document.getElementById('word-display');
+            const roleDisplay = document.getElementById('role-display');
+            
+            // SEMPRE mostrar o papel do jogador desde o início
+            roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(player.role)}</span>`;
+            roleDisplay.style.display = 'block';
+            
+            // Mostrar palavra baseado no papel
+            if (player.role === 'whiteman') {
+                wordDisplay.innerHTML = '<div style="color: #f5576c; font-weight: bold;">Você é o WhiteMan - Não recebeu palavra!</div>';
+            } else if (player.role === 'impostor') {
+                wordDisplay.innerHTML = `<div style="color: #f5576c; font-weight: bold;">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" style="color: #f5576c; font-weight: bold;">${player.word || 'N/A'}</span></div>`;
+            } else if (player.word) {
+                wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
+            } else {
+                wordDisplay.style.display = 'none';
+            }
+            
+            wordDisplay.style.display = 'block';
+        }
+    }
+    
+    // Atualizar dicas
+    const hintsList = document.getElementById('hints-list');
+    hintsList.innerHTML = hints.map(h => {
+        return `<div class="hint-item">
+            <strong>${h.player_name}</strong> (Rodada ${h.round_number}): ${h.word}
+        </div>`;
+    }).join('');
+    
+    // Gerenciar seção de dicas
+    const hintInputSection = document.getElementById('hint-input-section');
+    if (game.status === 'hints' && game.current_player === playerName) {
+        const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);
+        if (currentPlayer) {
+            hintInputSection.style.display = 'block';
+            startHintTimer();
+        }
+    } else {
+        hintInputSection.style.display = 'none';
+        stopHintTimer();
+    }
+    
+    // Gerenciar votação
+    const votingSection = document.getElementById('voting-section');
+    if (game.status === 'voting') {
+        votingSection.style.display = 'block';
+        const activePlayers = players.filter(p => !p.is_eliminated && p.name !== playerName);
+        const voteButtons = document.getElementById('vote-buttons');
+        voteButtons.innerHTML = activePlayers.map(p => {
+            const hasVoted = votes.some(v => v.voter_name === playerName);
+            return `<button class="vote-button ${hasVoted ? 'voted' : ''}" 
+                    data-target="${p.name}" 
+                    ${hasVoted ? 'disabled' : ''}>
+                ${p.name}
+            </button>`;
+        }).join('');
+        
+        // Adicionar listeners aos botões de voto
+        voteButtons.querySelectorAll('.vote-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!btn.disabled) {
+                    sendMessage({
+                        type: 'submit_vote',
+                        player_name: playerName,
+                        target_name: btn.dataset.target
+                    });
+                }
+            });
+        });
+    } else {
+        votingSection.style.display = 'none';
+    }
+    
+    // Mostrar resultados se o jogo terminou
+    if (game.status === 'finished') {
+        const resultsSection = document.getElementById('results-section');
+        resultsSection.style.display = 'block';
+        
+        // Determinar vencedor
+        const impostors = players.filter(p => p.role === 'impostor');
+        const activeImpostors = impostors.filter(p => !p.is_eliminated);
+        
+        let winnerMessage = '';
+        if (activeImpostors.length === 0) {
+            winnerMessage = '🏆 Cidadãos ganharam!';
+        } else {
+            winnerMessage = '🏆 Impostores ganharam!';
+        }
+        
+        document.getElementById('winner-message').innerHTML = `<h2>${winnerMessage}</h2>`;
+        
+        // Revelar papéis
+        const rolesReveal = document.getElementById('roles-reveal');
+        rolesReveal.innerHTML = '<h3>Papéis revelados:</h3>' + 
+            players.map(p => {
+                const wordText = p.word ? ` (${p.word})` : '';
+                return `<div class="player-item">
+                    ${p.name}: ${getRoleText(p.role)}${wordText}
+                </div>`;
+            }).join('');
+        
+        // Mostrar timer e botões de ação
+        const timerDiv = document.getElementById('auto-delete-timer');
+        if (timerDiv) {
+            timerDiv.style.display = 'block';
+        }
+        
+        // Mostrar botões de ação apenas para o criador
+        const currentPlayer = players.find(p => p.name === playerName);
+        const gameActions = document.getElementById('game-actions');
+        if (currentPlayer && currentPlayer.is_creator) {
+            // Remover listeners antigos se existirem
+            const oldRestartBtn = document.getElementById('restart-btn');
+            const oldCloseBtn = document.getElementById('close-room-btn');
+            if (oldRestartBtn) oldRestartBtn.remove();
+            if (oldCloseBtn) oldCloseBtn.remove();
+            
+            gameActions.innerHTML = `
+                <button id="restart-btn" class="btn" style="margin-right: 10px;">
+                    🔄 Reiniciar Jogo
+                </button>
+                <button id="close-room-btn" class="btn btn-danger">
+                    🗑️ Fechar Sala
+                </button>
+            `;
+            
+            const restartBtn = document.getElementById('restart-btn');
+            const closeBtn = document.getElementById('close-room-btn');
+            
+            if (restartBtn) {
+                restartBtn.onclick = () => {
+                    if (confirm('Deseja reiniciar o jogo com os mesmos jogadores?')) {
+                        sendMessage({
+                            type: 'restart_game',
+                            player_name: playerName
+                        });
+                    }
+                };
+            }
+            
+            if (closeBtn) {
+                closeBtn.onclick = () => {
+                    if (confirm('Tem certeza que deseja fechar a sala? Isso apagará todos os dados do jogo!')) {
+                        sendMessage({
+                            type: 'close_room',
+                            player_name: playerName
+                        });
+                    }
+                };
+            }
+        } else {
+            gameActions.innerHTML = '<p>Aguardando o criador da sala reiniciar ou fechar...</p>';
+        }
+    }
+}
+
+function startHintTimer() {
+    timeLeft = 30;
+    updateTimer();
+    hintTimer = setInterval(() => {
+        timeLeft--;
+        updateTimer();
+        if (timeLeft <= 0) {
+            stopHintTimer();
+            // Enviar uma dica vazia ou sinalizar timeout
+            // O backend pode tratar isso como eliminação
+            alert('Tempo esgotado! Você foi eliminado por não dar dica a tempo.');
+            // Nota: A eliminação por timeout pode ser implementada no backend
+            // Por enquanto, apenas mostra o alerta
+        }
+    }, 1000);
+}
+
+function stopHintTimer() {
+    if (hintTimer) {
+        clearInterval(hintTimer);
+        hintTimer = null;
+    }
+}
+
+function updateTimer() {
+    document.getElementById('timer').textContent = timeLeft;
+}
+
+function getStatusText(status) {
+    const statusMap = {
+        'waiting': 'Aguardando Jogadores',
+        'configuring': 'Configurando',
+        'hints': 'Rodada de Dicas',
+        'voting': 'Votação',
+        'finished': 'Finalizado'
+    };
+    return statusMap[status] || status;
+}
+
+function getRoleText(role) {
+    const roleMap = {
+        'citizen': 'Cidadão',
+        'impostor': 'Impostor',
+        'whiteman': 'WhiteMan'
+    };
+    return roleMap[role] || role;
+}
+
+// Event listeners
+if (playerName) {
+    document.getElementById('start-btn')?.addEventListener('click', () => {
+        sendMessage({
+            type: 'start_game',
+            player_name: playerName
+        });
+    });
+    
+    document.getElementById('submit-hint')?.addEventListener('click', () => {
+        const word = document.getElementById('hint-word').value.trim();
+        if (word) {
+            sendMessage({
+                type: 'submit_hint',
+                player_name: playerName,
+                word: word
+            });
+            document.getElementById('hint-word').value = '';
+            stopHintTimer();
+        }
+    });
+    
+    document.getElementById('hint-word')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            document.getElementById('submit-hint').click();
+        }
+    });
+    
+    connectWebSocket();
+}
+</script>
+{% endblock %}
+

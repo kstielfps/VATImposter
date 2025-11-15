@@ -1,0 +1,241 @@
+from django.db import models
+import secrets
+import random
+
+
+class WordGroup(models.Model):
+    """Grupo de palavras similares"""
+    name = models.CharField(max_length=100, blank=True, null=True, help_text="Nome opcional do grupo")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name or f"Grupo {self.id}"
+
+    class Meta:
+        verbose_name = "Grupo de Palavras"
+        verbose_name_plural = "Grupos de Palavras"
+
+
+class Word(models.Model):
+    """Palavra dentro de um grupo"""
+    group = models.ForeignKey(WordGroup, on_delete=models.CASCADE, related_name='words')
+    text = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.text} ({self.group})"
+
+    class Meta:
+        verbose_name = "Palavra"
+        verbose_name_plural = "Palavras"
+
+
+class Game(models.Model):
+    """Sala de jogo"""
+    STATUS_CHOICES = [
+        ('waiting', 'Aguardando Jogadores'),
+        ('configuring', 'Configurando'),
+        ('hints', 'Rodada de Dicas'),
+        ('voting', 'Votação'),
+        ('finished', 'Finalizado'),
+    ]
+
+    code = models.CharField(max_length=6, unique=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+    creator = models.CharField(max_length=100)  # Nome do criador
+    
+    # Configurações
+    num_impostors = models.IntegerField(default=1)  # 1 ou 2
+    num_whitemen = models.IntegerField(default=0)  # 0, 1 ou 2
+    max_players = models.IntegerField(default=8)
+    min_players = models.IntegerField(default=4)
+    
+    # Palavras do jogo
+    word_group = models.ForeignKey(WordGroup, on_delete=models.SET_NULL, null=True, blank=True)
+    citizen_word = models.ForeignKey(Word, on_delete=models.SET_NULL, null=True, blank=True, related_name='citizen_games')
+    impostor_word = models.ForeignKey(Word, on_delete=models.SET_NULL, null=True, blank=True, related_name='impostor_games')
+    
+    # Controle de rodadas
+    current_round = models.IntegerField(default=0)  # 0 = não iniciado, 1-3 = rodadas de dicas, 4+ = rodadas após votação
+    current_player_index = models.IntegerField(default=0)
+    hint_timeout_seconds = models.IntegerField(default=30)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    def generate_code(self):
+        """Gera um código único de 6 caracteres"""
+        while True:
+            code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(6))
+            if not Game.objects.filter(code=code).exists():
+                return code
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = self.generate_code()
+        super().save(*args, **kwargs)
+
+    def assign_roles(self):
+        """Distribui os papéis (Impostor, WhiteMan, Cidadão)"""
+        players = list(self.players.filter(is_eliminated=False).order_by('?'))
+        
+        # Atribuir impostores
+        impostors = players[:self.num_impostors]
+        for player in impostors:
+            player.role = 'impostor'
+            player.word = self.impostor_word
+            player.save()
+        
+        # Atribuir whitemen
+        remaining = players[self.num_impostors:]
+        whitemen = remaining[:self.num_whitemen]
+        for player in whitemen:
+            player.role = 'whiteman'
+            player.word = None  # WhiteMan não recebe palavra
+            player.save()
+        
+        # Resto são cidadãos
+        citizens = remaining[self.num_whitemen:]
+        for player in citizens:
+            player.role = 'citizen'
+            player.word = self.citizen_word
+            player.save()
+
+    def assign_words(self):
+        """Atribui palavras do grupo escolhido"""
+        if not self.word_group:
+            # Escolher grupo aleatório
+            groups = WordGroup.objects.filter(words__isnull=False).distinct()
+            if not groups.exists():
+                return False
+            
+            self.word_group = random.choice(list(groups))
+            words = list(self.word_group.words.all())
+            
+            if len(words) < 2:
+                return False
+            
+            # Escolher duas palavras diferentes
+            self.citizen_word = random.choice(words)
+            remaining = [w for w in words if w != self.citizen_word]
+            self.impostor_word = random.choice(remaining) if remaining else self.citizen_word
+            
+            self.save()
+        
+        return True
+
+    def can_start(self):
+        """Verifica se o jogo pode ser iniciado"""
+        # Contar todos os jogadores (não eliminados) quando o jogo está em waiting
+        # Após reinício, todos os jogadores devem estar ativos
+        if self.status == 'waiting':
+            total_players = self.players.count()
+            return total_players >= self.min_players and total_players <= self.max_players
+        else:
+            active_players = self.players.filter(is_eliminated=False).count()
+            return active_players >= self.min_players and active_players <= self.max_players
+
+    def get_active_players(self):
+        """Retorna jogadores ativos (não eliminados)"""
+        return self.players.filter(is_eliminated=False).order_by('id')
+
+    def get_current_player(self):
+        """Retorna o jogador atual"""
+        active_players = list(self.get_active_players())
+        if active_players and 0 <= self.current_player_index < len(active_players):
+            return active_players[self.current_player_index]
+        return None
+
+    def next_player(self):
+        """Avança para o próximo jogador"""
+        active_players = list(self.get_active_players())
+        self.current_player_index = (self.current_player_index + 1) % len(active_players)
+        self.save()
+
+    def check_win_conditions(self):
+        """Verifica condições de vitória"""
+        active_players = list(self.get_active_players())
+        impostors = [p for p in active_players if p.role == 'impostor']
+        non_impostors = [p for p in active_players if p.role != 'impostor']
+        
+        # Se não há mais impostores, cidadãos ganham
+        if len(impostors) == 0:
+            return 'citizens'
+        
+        # Se sobram apenas 2 jogadores
+        if len(active_players) == 2:
+            if len(impostors) == 2:
+                return 'impostors'
+            elif len(impostors) == 1:
+                return 'impostors'
+        
+        return None
+
+    def __str__(self):
+        return f"Game {self.code} - {self.get_status_display()}"
+
+    class Meta:
+        verbose_name = "Jogo"
+        verbose_name_plural = "Jogos"
+
+
+class Player(models.Model):
+    """Jogador em uma sala"""
+    ROLE_CHOICES = [
+        ('citizen', 'Cidadão'),
+        ('impostor', 'Impostor'),
+        ('whiteman', 'WhiteMan'),
+    ]
+
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='players')
+    name = models.CharField(max_length=100)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, null=True, blank=True)
+    word = models.ForeignKey(Word, on_delete=models.SET_NULL, null=True, blank=True)
+    is_eliminated = models.BooleanField(default=False)
+    is_creator = models.BooleanField(default=False)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.game.code})"
+
+    class Meta:
+        verbose_name = "Jogador"
+        verbose_name_plural = "Jogadores"
+        unique_together = [['game', 'name']]
+
+
+class Hint(models.Model):
+    """Dica dada por um jogador"""
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='hints')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='hints')
+    round_number = models.IntegerField()
+    word = models.CharField(max_length=100)  # A palavra da dica
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.player.name} - Rodada {self.round_number}: {self.word}"
+
+    class Meta:
+        verbose_name = "Dica"
+        verbose_name_plural = "Dicas"
+        unique_together = [['game', 'player', 'round_number']]
+
+
+class Vote(models.Model):
+    """Voto de um jogador"""
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='votes')
+    voter = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='votes_cast')
+    target = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='votes_received')
+    round_number = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.voter.name} votou em {self.target.name} (Rodada {self.round_number})"
+
+    class Meta:
+        verbose_name = "Voto"
+        verbose_name_plural = "Votos"
+        unique_together = [['game', 'voter', 'round_number']]
+
+
+

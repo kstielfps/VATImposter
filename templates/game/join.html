@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Entrar na Sala - VAT Imposter{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>🔑 Entrar na Sala</h1>
+    
+    <div id="error-message" class="error" style="display: none;"></div>
+    
+    <form id="join-form">
+        <label for="code">Código da Sala:</label>
+        <input type="text" id="code" name="code" required placeholder="Digite o código" style="text-transform: uppercase;">
+        
+        <label for="player_name">Seu Nome:</label>
+        <input type="text" id="player_name" name="player_name" required placeholder="Digite seu nome">
+        
+        <button type="submit" class="btn" style="width: 100%;">Entrar na Sala</button>
+    </form>
+    
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="{% url 'home' %}" class="btn btn-secondary">← Voltar</a>
+    </div>
+</div>
+
+<script>
+document.getElementById('code').addEventListener('input', (e) => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+
+document.getElementById('join-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        code: document.getElementById('code').value.toUpperCase(),
+        player_name: document.getElementById('player_name').value,
+    };
+    
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('{% url "join_game" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            window.location.href = data.redirect + '?name=' + encodeURIComponent(formData.player_name);
+        } else {
+            errorDiv.textContent = data.error || 'Erro ao entrar na sala';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Erro de conexão. Tente novamente.';
+        errorDiv.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}
+
+
+
