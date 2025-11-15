@@ -21,12 +21,16 @@ Este guia vai te ajudar a fazer deploy do VAT Imposter no Railway.
 
 1. No dashboard do Railway, clique em **"New"** → **"Database"** → **"Add PostgreSQL"**
 2. Railway criará automaticamente um banco PostgreSQL
-3. Anote as variáveis de ambiente que serão criadas:
-   - `PGHOST`
-   - `PGPORT`
-   - `PGDATABASE`
-   - `PGUSER`
-   - `PGPASSWORD`
+3. **IMPORTANTE**: Conecte o serviço PostgreSQL ao serviço Django:
+   - Clique no serviço Django (não no PostgreSQL)
+   - Vá em **"Settings"** → **"Service Connections"**
+   - Clique em **"Connect"** ao lado do serviço PostgreSQL
+   - Isso disponibilizará automaticamente as variáveis de ambiente:
+     - `PGHOST`
+     - `PGPORT`
+     - `PGDATABASE`
+     - `PGUSER`
+     - `PGPASSWORD`
 
 ### 3. Configurar Variáveis de Ambiente
 
