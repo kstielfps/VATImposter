@@ -2,7 +2,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 import json
+import traceback
 from .models import Game, Player
 
 
@@ -16,40 +18,57 @@ def home(request):
 def create_game(request):
     """Criar uma nova sala de jogo"""
     if request.method == 'POST':
-        data = json.loads(request.body)
-        creator_name = data.get('creator_name', '').strip()
-        num_impostors = int(data.get('num_impostors', 1))
-        num_whitemen = int(data.get('num_whitemen', 0))
-        
-        # Validações
-        if not creator_name:
-            return JsonResponse({'error': 'Nome é obrigatório'}, status=400)
-        
-        if num_impostors < 1 or num_impostors > 2:
-            return JsonResponse({'error': 'Número de impostores deve ser entre 1 e 2'}, status=400)
-        
-        if num_whitemen < 0 or num_whitemen > 2:
-            return JsonResponse({'error': 'Número de whitemen deve ser entre 0 e 2'}, status=400)
-        
-        # Criar jogo
-        game = Game.objects.create(
-            creator=creator_name,
-            num_impostors=num_impostors,
-            num_whitemen=num_whitemen,
-            status='waiting'
-        )
-        
-        # Criar jogador criador
-        Player.objects.create(
-            game=game,
-            name=creator_name,
-            is_creator=True
-        )
-        
-        return JsonResponse({
-            'code': game.code,
-            'redirect': f'/game/{game.code}/'
-        })
+        try:
+            data = json.loads(request.body)
+            creator_name = data.get('creator_name', '').strip()
+            num_impostors = int(data.get('num_impostors', 1))
+            num_whitemen = int(data.get('num_whitemen', 0))
+            
+            # Validações
+            if not creator_name:
+                return JsonResponse({'error': 'Nome é obrigatório'}, status=400)
+            
+            if num_impostors < 1 or num_impostors > 2:
+                return JsonResponse({'error': 'Número de impostores deve ser entre 1 e 2'}, status=400)
+            
+            if num_whitemen < 0 or num_whitemen > 2:
+                return JsonResponse({'error': 'Número de whitemen deve ser entre 0 e 2'}, status=400)
+            
+            # Criar jogo
+            game = Game.objects.create(
+                creator=creator_name,
+                num_impostors=num_impostors,
+                num_whitemen=num_whitemen,
+                status='waiting'
+            )
+            
+            # Criar jogador criador
+            Player.objects.create(
+                game=game,
+                name=creator_name,
+                is_creator=True
+            )
+            
+            return JsonResponse({
+                'code': game.code,
+                'redirect': f'/game/{game.code}/'
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Dados inválidos'}, status=400)
+        except ValueError as e:
+            return JsonResponse({'error': f'Valor inválido: {str(e)}'}, status=400)
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            # Em produção, não expor o trace completo por segurança
+            # Mas vamos logar para debug
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao criar jogo: {str(e)}\n{error_trace}")
+            
+            if settings.DEBUG:
+                return JsonResponse({'error': f'Erro interno: {str(e)}', 'trace': error_trace}, status=500)
+            else:
+                return JsonResponse({'error': 'Erro interno do servidor. Verifique os logs.'}, status=500)
     
     return render(request, 'game/create.html')
 
