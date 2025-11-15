@@ -57,17 +57,30 @@ Railway deve detectar automaticamente, mas verifique:
 
 ### 5. Executar Migrações
 
-Após o primeiro deploy, você precisa executar as migrações:
+**IMPORTANTE**: As migrações devem ser executadas automaticamente durante o deploy (configurado no `.nixpacks.toml` e `railway.json`). 
+
+**Se as migrações não foram executadas automaticamente**, você pode executá-las manualmente:
 
 1. No dashboard do Railway, vá no seu serviço Django
-2. Clique em **"Deployments"** → **"View Logs"**
-3. Clique em **"Shell"** ou **"Run Command"**
-4. Execute:
+2. Clique em **"Deployments"** → clique no deployment mais recente
+3. Clique em **"View Logs"** para ver os logs do deploy
+4. Verifique se há mensagens de erro relacionados a migrações
+5. Se necessário, clique em **"Shell"** ou **"Run Command"** e execute:
 ```bash
 python manage.py migrate
 python manage.py populate_words
 python manage.py createadmin --username admin --email admin@example.com --password <sua_senha>
 ```
+
+**Para verificar se as migrações foram aplicadas:**
+- No serviço PostgreSQL, vá em **"Database"** → **"Data"**
+- Você deve ver tabelas como `game_game`, `game_player`, `game_wordgroup`, etc.
+- Se não houver tabelas, as migrações não foram executadas
+
+**Para verificar logs de erro:**
+- No serviço Django, vá em **"Deployments"** → **"View Logs"**
+- Procure por mensagens de erro (em vermelho)
+- Se houver erro 500 ao criar sala, os logs mostrarão o erro específico
 
 ### 6. Configurar Domínio (Opcional)
 
