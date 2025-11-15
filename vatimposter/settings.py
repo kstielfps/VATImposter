@@ -90,14 +90,31 @@ ASGI_APPLICATION = 'vatimposter.asgi.application'
 # Configuração do banco de dados
 # Railway fornece variáveis específicas para PostgreSQL
 # Tentar usar variáveis do Railway primeiro, depois variáveis customizadas
+# No Railway, as variáveis PGHOST, PGDATABASE, etc. são automaticamente disponibilizadas
+db_host = os.environ.get('PGHOST') or os.environ.get('DB_HOST')
+db_name = os.environ.get('PGDATABASE') or os.environ.get('DB_NAME')
+db_user = os.environ.get('PGUSER') or os.environ.get('DB_USER')
+db_password = os.environ.get('PGPASSWORD') or os.environ.get('DB_PASSWORD')
+db_port = os.environ.get('PGPORT') or os.environ.get('DB_PORT', '5432')
+
+# Se não houver configuração de host, usar localhost apenas em desenvolvimento
+if not db_host:
+    db_host = 'localhost'
+if not db_name:
+    db_name = 'vatimposter'
+if not db_user:
+    db_user = 'postgres'
+if not db_password:
+    db_password = 'postgres'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('PGDATABASE') or os.environ.get('DB_NAME', 'vatimposter'),
-        'USER': os.environ.get('PGUSER') or os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('PGPASSWORD') or os.environ.get('DB_PASSWORD', 'postgres'),
-        'HOST': os.environ.get('PGHOST') or os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('PGPORT') or os.environ.get('DB_PORT', '5432'),
+        'NAME': db_name,
+        'USER': db_user,
+        'PASSWORD': db_password,
+        'HOST': db_host,
+        'PORT': db_port,
     }
 }
 
@@ -137,7 +154,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+# Criar diretório estático se não existir (apenas para desenvolvimento)
+static_dir = BASE_DIR / 'static'
+if not static_dir.exists():
+    static_dir.mkdir(exist_ok=True)
+STATICFILES_DIRS = [static_dir] if static_dir.exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # Para produção
 
 # WhiteNoise para servir arquivos estáticos em produção
