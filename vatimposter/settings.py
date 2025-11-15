@@ -87,14 +87,17 @@ ASGI_APPLICATION = 'vatimposter.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# Configuração do banco de dados
+# Railway fornece variáveis específicas para PostgreSQL
+# Tentar usar variáveis do Railway primeiro, depois variáveis customizadas
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'vatimposter'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+        'NAME': os.environ.get('PGDATABASE') or os.environ.get('DB_NAME', 'vatimposter'),
+        'USER': os.environ.get('PGUSER') or os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('PGPASSWORD') or os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('PGHOST') or os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('PGPORT') or os.environ.get('DB_PORT', '5432'),
     }
 }
 
