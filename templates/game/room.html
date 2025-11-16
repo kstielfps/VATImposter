@@ -154,37 +154,6 @@
     .player-item > span:first-child {
         flex: 1;
     }
-
-    #notification-banner {
-        margin: 15px 0;
-        padding: 12px 16px;
-        background: rgba(77, 212, 255, 0.1);
-        border: 1px solid rgba(77, 212, 255, 0.3);
-        border-radius: 12px;
-        display: none;
-        align-items: center;
-        gap: 12px;
-    }
-
-    #notification-banner.show {
-        display: flex;
-    }
-
-    #notification-banner button {
-        padding: 6px 14px;
-        border-radius: 8px;
-        background: rgba(77, 212, 255, 0.2);
-        border: 1px solid rgba(77, 212, 255, 0.4);
-        color: var(--accent-500);
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-
-    #notification-banner button:hover {
-        background: rgba(77, 212, 255, 0.3);
-        border-color: rgba(77, 212, 255, 0.6);
-    }
 </style>
 {% endblock %}
 
@@ -197,11 +166,6 @@
         Você não está nesta sala. Por favor, entre com seu nome.
     </div>
     {% else %}
-
-    <div id="notification-banner">
-        <span>🔔 Ative as notificações para ser alertado quando for sua vez!</span>
-        <button id="enable-notifications">Ativar Notificações</button>
-    </div>
 
     {% if player %}
     <button id="streamer-toggle" class="streamer-toggle" title="Modo Streamer - Oculta palavra e função">
@@ -291,8 +255,6 @@ let isFetchingState = false;
 let streamerMode = false;
 let lastHintCount = 0;
 let lastCurrentPlayer = null;
-let lastGameStatus = null;
-let notificationsEnabled = false;
 
 function playSound(frequency, duration, type = 'sine') {
     try {
@@ -329,8 +291,10 @@ function playYourTurnSound() {
 
 function handlePlayerPing(element) {
     if (!element) {
+        console.log('handlePlayerPing called with no element');
         return;
     }
+    console.log('Playing ping sound for:', element.textContent);
     playYourTurnSound();
     element.classList.add('pinged');
     setTimeout(() => element.classList.remove('pinged'), 400);
@@ -341,52 +305,22 @@ function attachPlayerPingHandlers() {
     if (!playersList) {
         return;
     }
+    const currentTurnItems = playersList.querySelectorAll('.player-item.current-turn');
+    console.log('Attaching ping handlers to', currentTurnItems.length, 'players with current turn');
+    
     playersList.querySelectorAll('.player-item.current-turn').forEach(item => {
-        item.addEventListener('click', () => handlePlayerPing(item));
-        item.addEventListener('keydown', (event) => {
+        // Remove old listeners by cloning (prevents duplicate listeners)
+        const newItem = item.cloneNode(true);
+        item.parentNode.replaceChild(newItem, item);
+        
+        newItem.addEventListener('click', () => handlePlayerPing(newItem));
+        newItem.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                handlePlayerPing(item);
+                handlePlayerPing(newItem);
             }
         });
     });
-}
-
-function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-            notificationsEnabled = (permission === 'granted');
-            updateNotificationBanner();
-        });
-    } else if ('Notification' in window && Notification.permission === 'granted') {
-        notificationsEnabled = true;
-        updateNotificationBanner();
-    }
-}
-
-function updateNotificationBanner() {
-    const banner = document.getElementById('notification-banner');
-    if (!banner) return;
-    
-    if ('Notification' in window && Notification.permission === 'default') {
-        banner.classList.add('show');
-    } else {
-        banner.classList.remove('show');
-    }
-}
-
-function showNotification(title, body, requireFocus = true) {
-    // Only show notification if tab is not focused or requireFocus is false
-    if (!requireFocus || document.hidden) {
-        if (notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, {
-                body: body,
-                icon: '/static/favicon.ico',
-                badge: '/static/favicon.ico',
-                tag: 'vatimposter-game'
-            });
-        }
-    }
 }
 
 function handleRoomClosed(data) {
@@ -606,16 +540,6 @@ function updateGameState(state) {
 
     if (hints.length > lastHintCount && game.status === 'hints') {
         playHintSound();
-        
-        // Show notification for new hints
-        if (hints.length > 0 && lastHintCount > 0) {
-            const newHint = hints[hints.length - 1];
-            showNotification(
-                '💡 Nova Dica!',
-                `${newHint.player_name}: ${newHint.word}`
-            );
-        }
-        
         // Scroll para a última dica
         setTimeout(() => {
             hintsList.scrollTop = hintsList.scrollHeight;
@@ -633,11 +557,6 @@ function updateGameState(state) {
 
             if (game.current_player === playerName && game.current_player !== lastCurrentPlayer) {
                 playYourTurnSound();
-                showNotification(
-                    '🎮 Sua Vez!',
-                    'É sua vez de dar uma dica!',
-                    false  // Always show, even if tab is focused
-                );
             }
         } else {
             currentTurnDisplay.style.display = 'none';
@@ -646,29 +565,6 @@ function updateGameState(state) {
         currentTurnDisplay.style.display = 'none';
     }
     lastCurrentPlayer = game.current_player;
-
-    // Notify when voting starts
-    if (game.status === 'voting' && lastGameStatus === 'hints' && !isSpectator) {
-        showNotification(
-            '🗳️ Votação Iniciada!',
-            'É hora de votar no impostor!',
-            false
-        );
-    }
-
-    // Notify when game finishes
-    if (game.status === 'finished' && lastGameStatus !== 'finished') {
-        const impostors = players.filter(p => p.role === 'impostor');
-        const activeImpostors = impostors.filter(p => !p.is_eliminated);
-        const winner = activeImpostors.length === 0 ? 'Cidadãos' : 'Impostores';
-        showNotification(
-            '🏆 Jogo Finalizado!',
-            `${winner} venceram!`,
-            false
-        );
-    }
-
-    lastGameStatus = game.status;
 
     const hintInputSection = document.getElementById('hint-input-section');
     if (game.status === 'hints' && game.current_player === playerName && !isSpectator) {
@@ -893,17 +789,6 @@ if (playerName && !isSpectator) {
 }
 
 if (playerName || isSpectator) {
-    // Request notification permission
-    requestNotificationPermission();
-    updateNotificationBanner();
-    
-    const enableNotifBtn = document.getElementById('enable-notifications');
-    if (enableNotifBtn) {
-        enableNotifBtn.addEventListener('click', () => {
-            requestNotificationPermission();
-        });
-    }
-    
     startPolling();
     window.addEventListener('beforeunload', () => {
         if (pollTimer) {
