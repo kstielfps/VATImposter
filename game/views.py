@@ -55,6 +55,8 @@ def create_game(request):
             )
             
             # Armazenar autenticação na sessão
+            # A chave inclui o código da sala, permitindo que o mesmo nome de jogador
+            # exista em salas diferentes sem conflito (ex: player_ABC123 e player_XYZ789)
             request.session[f'player_{game.code}'] = creator_name
             request.session.modified = True
             
@@ -119,6 +121,8 @@ def join_game(request):
         )
         
         # Armazenar autenticação na sessão
+        # A chave inclui o código da sala, permitindo que o mesmo nome de jogador
+        # exista em salas diferentes sem conflito (ex: player_ABC123 e player_XYZ789)
         request.session[f'player_{game.code}'] = player_name
         request.session.modified = True
         
@@ -135,6 +139,8 @@ def game_room(request, code):
     game = get_object_or_404(Game, code=code)
     
     # Obter player_name da sessão (cookie) ao invés do GET parameter
+    # A chave da sessão inclui o código da sala, então cada sala tem sua própria
+    # autenticação independente, permitindo o mesmo nome em salas diferentes
     player_name = request.session.get(f'player_{code}', '')
     
     # Verificar se o jogador existe e está autenticado

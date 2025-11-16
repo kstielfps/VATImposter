@@ -108,6 +108,30 @@
         text-align: center;
         font-weight: bold;
     }
+    
+    .current-turn-display {
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        margin: 20px 0;
+        text-align: center;
+        font-size: 18px;
+        font-weight: bold;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .player-item.current-turn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: bold;
+        transform: scale(1.05);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    }
+    
+    .player-item.current-turn::before {
+        content: "👉 ";
+    }
 </style>
 {% endblock %}
 
@@ -153,6 +177,10 @@
             
             <div id="role-display" class="role-display" style="display: none;">
                 Seu papel: <span id="my-role"></span>
+            </div>
+            
+            <div id="current-turn-display" class="current-turn-display" style="display: none;">
+                <div>É a vez de: <span id="current-turn-player"></span></div>
             </div>
             
             <div id="hints-section">
@@ -291,10 +319,14 @@ function updateGameState(state) {
     
     // Atualizar lista de jogadores
     const playersList = document.getElementById('players-list');
+    const currentTurnPlayer = game.status === 'hints' ? game.current_player : null;
     playersList.innerHTML = players.map(p => {
         let classes = 'player-item';
         if (p.is_creator) classes += ' creator';
         if (p.is_eliminated) classes += ' eliminated';
+        if (currentTurnPlayer && p.name === currentTurnPlayer && !p.is_eliminated) {
+            classes += ' current-turn';
+        }
         return `<li class="${classes}" data-player-id="${p.id}">
             ${p.name}${p.is_eliminated ? ' <span style="color: red;">❌</span>' : ''}
         </li>`;
@@ -334,7 +366,22 @@ function updateGameState(state) {
         </div>`;
     }).join('');
     
-    // Gerenciar seção de dicas
+    // Mostrar de quem é a vez (visível para TODOS os jogadores)
+    const currentTurnDisplay = document.getElementById('current-turn-display');
+    const currentTurnPlayerSpan = document.getElementById('current-turn-player');
+    if (game.status === 'hints' && game.current_player) {
+        const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);
+        if (currentPlayer) {
+            currentTurnDisplay.style.display = 'block';
+            currentTurnPlayerSpan.textContent = game.current_player;
+        } else {
+            currentTurnDisplay.style.display = 'none';
+        }
+    } else {
+        currentTurnDisplay.style.display = 'none';
+    }
+    
+    // Gerenciar seção de dicas (apenas para o jogador da vez)
     const hintInputSection = document.getElementById('hint-input-section');
     if (game.status === 'hints' && game.current_player === playerName) {
         const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);

@@ -708,7 +708,12 @@ class GameConsumer(AsyncWebsocketConsumer):
         return game.get_current_player()
     
     async def get_authenticated_player_name(self):
-        """Obter player_name autenticado da sessão"""
+        """Obter player_name autenticado da sessão
+        
+        A chave da sessão inclui o código da sala (player_{game_code}), então cada
+        sala tem sua própria autenticação independente. Isso permite que o mesmo
+        nome de jogador exista em salas diferentes sem conflito.
+        """
         # A sessão deve estar disponível via SessionMiddlewareStack
         session = self.scope.get('session')
         if session:
