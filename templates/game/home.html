@@ -4,75 +4,48 @@
 
 {% block extra_css %}
 <style>
+    .hero-copy {
+        text-align: center;
+        max-width: 640px;
+        margin: 0 auto 24px;
+    }
+
     .games-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 30px;
-        margin-top: 30px;
+        margin-top: 32px;
     }
-    
-    .game-card {
-        background: white;
-        border-radius: 15px;
-        padding: 30px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        transition: transform 0.3s, box-shadow 0.3s;
-        cursor: pointer;
-        border: 3px solid transparent;
-    }
-    
-    .game-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-        border-color: #667eea;
-    }
-    
-    .game-card h2 {
-        color: #667eea;
-        margin-bottom: 15px;
-        text-align: center;
-    }
-    
-    .game-card .description {
-        color: #666;
-        margin-bottom: 20px;
-        text-align: center;
-        line-height: 1.6;
-    }
-    
+
     .game-card .game-actions {
-        display: flex;
-        gap: 10px;
         justify-content: center;
-        flex-wrap: wrap;
     }
-    
-    .game-card .game-actions .btn {
+
+    .game-card .btn {
         flex: 1;
-        min-width: 120px;
+        min-width: 140px;
     }
-    
+
     .coming-soon {
-        opacity: 0.6;
+        opacity: 0.35;
         pointer-events: none;
+        border-style: dashed;
     }
-    
+
     .coming-soon::after {
-        content: "Em Breve";
+        content: "EM BREVE";
         display: block;
         text-align: center;
-        margin-top: 10px;
-        color: #999;
-        font-style: italic;
+        margin-top: 12px;
+        letter-spacing: 0.35em;
+        font-size: 0.75rem;
+        color: var(--text-300);
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card hero-copy">
     <h1>🎮 VATGames</h1>
-    <p style="text-align: center; margin-bottom: 30px; font-size: 18px; color: #666;">
-        Escolha um jogo para começar a diversão!
+    <p class="lead">
+        Colete seus amigos, crie uma sala segura e entre em partidas rápidas com um visual minimalista totalmente dark.
     </p>
 </div>
 
@@ -81,7 +54,7 @@
     <div class="game-card">
         <h2>🕵️ VAT Imposter</h2>
         <p class="description">
-            Descubra quem é o impostor através das dicas! Um jogo de dedução e estratégia onde você precisa descobrir quem está mentindo.
+            Dê pistas sutis, leia o clima da sala e descubra quem está mentindo nesse modo clássico de dedução em tempo real.
         </p>
         <div class="game-actions">
             <a href="{% url 'create_game' %}" class="btn">
@@ -106,14 +79,13 @@
 
 <div class="card">
     <h2>📖 Como Jogar VAT Imposter</h2>
-    <ol style="line-height: 2; padding-left: 20px;">
-        <li><strong>Cidadãos:</strong> Recebem a palavra correta. Tentem descobrir quem é o impostor!</li>
-        <li><strong>Impostor:</strong> Recebe uma palavra diferente. Finge que conhece a palavra correta!</li>
-        <li><strong>WhiteMan:</strong> Recebe uma palavra de um grupo DIFERENTE dos outros jogadores. Ele NÃO sabe que é WhiteMan - para ele, aparece como Cidadão! Só descobre quando é eliminado. Todos descobrem quando um WhiteMan é eliminado.</li>
-        <li>Dê dicas sobre sua palavra (sem revelá-la!)</li>
-        <li>Vote em quem você acha que é o impostor</li>
-        <li>Cidadãos ganham se eliminarem todos os impostores</li>
-        <li>Impostor ganha se sobrar apenas 2 jogadores</li>
+    <ol>
+        <li><strong>Cidadãos</strong> recebem a palavra correta e colaboram para achar o impostor.</li>
+        <li><strong>Impostor</strong> recebe outra palavra e tenta passar despercebido.</li>
+        <li><strong>WhiteMan</strong> recebe um terceiro grupo de palavras sem saber disso. Todos descobrem quando ele cai.</li>
+        <li>Revezem dando dicas curtas sem revelar a palavra diretamente.</li>
+        <li>Quando chegar a hora, iniciem a votação e escolham quem deve sair.</li>
+        <li>Cidadãos vencem eliminando impostores. Impostores vencem quando restarem apenas 2 jogadores.</li>
     </ol>
 </div>
 {% endblock %}

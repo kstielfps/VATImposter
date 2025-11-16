@@ -8,7 +8,7 @@ import json
 import traceback
 import os
 import logging
-from .models import Game, Player
+from .models import Game, Player, sort_players_for_display
 
 User = get_user_model()
 
@@ -137,6 +137,7 @@ def join_game(request):
 def game_room(request, code):
     """Sala do jogo"""
     game = get_object_or_404(Game, code=code)
+    ordered_players = sort_players_for_display(game.code, game.players.all())
     
     # Modo espectador: permite assistir sem autenticação
     is_spectator = request.GET.get('spectator') == '1'
@@ -146,7 +147,7 @@ def game_room(request, code):
         context = {
             'game': game,
             'player': None,
-            'players': game.players.all(),
+            'players': ordered_players,
             'is_spectator': True,
         }
         return render(request, 'game/room.html', context)
@@ -177,7 +178,7 @@ def game_room(request, code):
     context = {
         'game': game,
         'player': player,
-        'players': game.players.all(),
+        'players': ordered_players,
         'is_spectator': False,
     }
     

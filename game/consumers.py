@@ -4,7 +4,7 @@ import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
-from .models import Game, Player, Hint, Vote
+from .models import Game, Player, Hint, Vote, sort_players_for_display
 
 
 class GameConsumer(AsyncWebsocketConsumer):
@@ -76,6 +76,8 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.handle_restart_game(data)
         elif message_type == 'close_room':
             await self.handle_close_room(data)
+        elif message_type == 'kick_player':
+            await self.handle_kick_player(data)
         elif message_type == 'get_state':
             await self.send_game_state()
 
@@ -351,13 +353,6 @@ class GameConsumer(AsyncWebsocketConsumer):
             }))
             return
         
-        if game.status != 'finished':
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': 'O jogo ainda não terminou'
-            }))
-            return
-        
         def restart_game_sync():
             from django.db import transaction
             
@@ -417,8 +412,78 @@ class GameConsumer(AsyncWebsocketConsumer):
             }
         )
 
+    async def handle_kick_player(self, data):
+        """Remover jogador da sala"""
+        game = await self.get_game()
+        if not game:
+            return
+        
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
+        target_player_name = data.get('target_player_name')
+        if not target_player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Jogador alvo não especificado'
+            }))
+            return
+        
+        player = await self.get_player(game, player_name)
+        
+        if not player or not player.is_creator:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Apenas o criador pode remover jogadores'
+            }))
+            return
+        
+        # Não pode kickar a si mesmo
+        if target_player_name == player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Você não pode se remover'
+            }))
+            return
+        
+        # Só pode kickar se o jogo não começou
+        if game.status != 'waiting' and game.status != 'configuring':
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não é possível remover jogadores após o jogo iniciar'
+            }))
+            return
+        
+        def kick_player_sync():
+            from django.db import transaction
+            
+            with transaction.atomic():
+                game_obj = Game.objects.select_for_update().get(id=game.id)
+                try:
+                    target = Player.objects.get(game=game_obj, name=target_player_name)
+                    target.delete()
+                    return True
+                except Player.DoesNotExist:
+                    return False
+        
+        success = await database_sync_to_async(kick_player_sync)()
+        
+        if success:
+            await self.send_game_state()
+        else:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Jogador não encontrado'
+            }))
+
     async def handle_close_room(self, data):
-        """Fechar e deletar a sala"""
+        """Fechar a sala permanentemente"""
         game = await self.get_game()
         if not game:
             return
@@ -490,7 +555,8 @@ class GameConsumer(AsyncWebsocketConsumer):
         players_data = []
         # Buscar players com select_related para evitar queries adicionais
         def get_players_data():
-            players_list = list(game.players.select_related('word').all())
+            players_qs = game.players.select_related('word').all()
+            players_list = sort_players_for_display(game.code, players_qs)
             result = []
             for player in players_list:
                 word_text = None

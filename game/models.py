@@ -1,6 +1,7 @@
 from django.db import models
 import secrets
 import random
+import hashlib
 
 
 class WordGroup(models.Model):
@@ -250,6 +251,21 @@ class Vote(models.Model):
         verbose_name = "Voto"
         verbose_name_plural = "Votos"
         unique_together = [['game', 'voter', 'round_number']]
+
+
+
+def sort_players_for_display(game_code, players):
+    """Return players sorted in a deterministic but role-agnostic order."""
+    player_list = list(players)
+
+    def display_key(player):
+        # Use a hash of game code and player id to shuffle order consistently per game
+        raw = f"{game_code}-{player.id}".encode('utf-8')
+        digest = hashlib.sha256(raw).hexdigest()
+        return int(digest[:8], 16)
+
+    player_list.sort(key=display_key)
+    return player_list
 
 
 

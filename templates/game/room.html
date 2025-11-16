@@ -6,174 +6,153 @@
 <style>
     .room-container {
         display: grid;
-        grid-template-columns: 1fr 2fr;
-        gap: 20px;
+        grid-template-columns: minmax(280px, 1fr) minmax(420px, 2fr);
+        gap: 32px;
+        align-items: start;
     }
-    
-    @media (max-width: 768px) {
+
+    @media (max-width: 960px) {
         .room-container {
             grid-template-columns: 1fr;
+            gap: 24px;
         }
     }
-    
-    .players-list {
-        list-style: none;
-    }
-    
-    .player-item {
-        padding: 10px;
-        margin: 5px 0;
-        background: #f5f5f5;
-        border-radius: 8px;
+
+    .room-panel {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
+        flex-direction: column;
+        gap: 24px;
     }
-    
-    .player-item.eliminated {
-        opacity: 0.5;
-        text-decoration: line-through;
-    }
-    
-    .player-item.creator::after {
-        content: " 👑";
-    }
-    
+
     .game-status {
-        padding: 15px;
-        background: #e3f2fd;
-        border-radius: 8px;
-        margin-bottom: 20px;
-    }
-    
-    .hint-input {
-        margin: 20px 0;
-    }
-    
-    .hints-list {
-        max-height: 400px;
-        overflow-y: auto;
-        margin-top: 20px;
-    }
-    
-    .hint-item {
-        padding: 10px;
-        margin: 5px 0;
-        background: #f9f9f9;
-        border-left: 4px solid #667eea;
-        border-radius: 4px;
-    }
-    
-    .voting-section {
-        margin-top: 20px;
-    }
-    
-    .vote-button {
-        width: 100%;
-        margin: 5px 0;
-        padding: 10px;
-        background: #fff;
-        border: 2px solid #667eea;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .vote-button:hover {
-        background: #667eea;
-        color: white;
-    }
-    
-    .vote-button.voted {
-        background: #667eea;
-        color: white;
-    }
-    
-    .word-display {
-        padding: 15px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 8px;
-        text-align: center;
-        font-size: 20px;
-        font-weight: bold;
-        margin: 20px 0;
-    }
-    
-    .role-display {
-        padding: 10px;
-        background: #fff3cd;
-        border-radius: 8px;
-        margin: 10px 0;
-        text-align: center;
-        font-weight: bold;
-    }
-    
-    .current-turn-display {
-        padding: 15px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 8px;
-        margin: 20px 0;
-        text-align: center;
-        font-size: 18px;
-        font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .player-item.current-turn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-weight: bold;
-        transform: scale(1.05);
-        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
-    }
-    
-    .player-item.current-turn::before {
-        content: "👉 ";
-    }
-    
-    .streamer-mode .word-display,
-    .streamer-mode .role-display {
-        display: none !important;
-    }
-    
-    .streamer-mode .word-display::before {
-        content: "🔒 Informação Ocultada";
-    }
-    
-    .streamer-toggle {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1000;
-        background: rgba(102, 126, 234, 0.9);
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 25px;
-        cursor: pointer;
-        font-weight: bold;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    
-    .streamer-toggle:hover {
-        background: rgba(102, 126, 234, 1);
-    }
-    
-    .streamer-toggle.active {
-        background: rgba(245, 87, 108, 0.9);
-    }
-    
-    .spectator-badge {
-        background: #f5576c;
-        color: white;
-        padding: 5px 15px;
+        padding: 20px;
         border-radius: 20px;
-        font-size: 12px;
-        font-weight: bold;
-        display: inline-block;
-        margin-left: 10px;
+        background: rgba(12, 16, 24, 0.85);
+        border: 1px solid rgba(77, 212, 255, 0.12);
+        display: grid;
+        gap: 10px;
+    }
+
+    .game-status span {
+        font-weight: 600;
+        color: var(--text-100);
+    }
+
+    .players-list {
+        margin-top: 12px;
+    }
+
+    .player-item.current-turn {
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .player-item.current-turn:focus-visible {
+        outline: 2px solid var(--accent-500);
+        outline-offset: 2px;
+    }
+
+    .player-item.current-turn.pinged {
+        border-color: rgba(77, 212, 255, 0.8);
+        box-shadow: 0 0 0 2px rgba(77, 212, 255, 0.25);
+        transform: translateX(2px);
+    }
+
+    .player-item.voted {
+        border-color: rgba(45, 211, 111, 0.6);
+        background: linear-gradient(120deg, rgba(45, 211, 111, 0.15), rgba(26, 32, 44, 0.85));
+    }
+
+    .room-action {
+        margin-top: 16px;
+    }
+
+    .hint-input {
+        margin-top: 20px;
+    }
+
+    .hint-input label {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.85rem;
+        color: var(--text-300);
+    }
+
+    .hint-input .btn {
+        margin-top: 12px;
+    }
+
+    #vote-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    #results-section {
+        margin-top: 32px;
+    }
+
+    .timer-card {
+        margin: 20px 0;
+        padding: 15px 18px;
+        border-radius: 18px;
+        background: rgba(244, 180, 0, 0.14);
+        border: 1px solid rgba(244, 180, 0, 0.45);
+        text-align: center;
+        transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .timer-card.is-warning {
+        background: rgba(244, 180, 0, 0.25);
+        border-color: rgba(244, 180, 0, 0.65);
+    }
+
+    .timer-card.is-danger {
+        background: rgba(255, 77, 109, 0.18);
+        border-color: rgba(255, 77, 109, 0.65);
+    }
+
+    #game-actions {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .danger-text {
+        color: var(--danger-500);
+        font-weight: 600;
+    }
+
+    .btn-kick {
+        background: rgba(255, 77, 109, 0.15);
+        border: 1px solid rgba(255, 77, 109, 0.4);
+        color: var(--danger-500);
+        border-radius: 8px;
+        padding: 4px 10px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        margin-left: auto;
+    }
+
+    .btn-kick:hover {
+        background: rgba(255, 77, 109, 0.3);
+        border-color: rgba(255, 77, 109, 0.6);
+        transform: scale(1.05);
+    }
+
+    .player-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .player-item > span:first-child {
+        flex: 1;
     }
 </style>
 {% endblock %}
@@ -181,90 +160,86 @@
 {% block content %}
 <div class="card">
     <h1>Sala: {{ game.code }}{% if is_spectator %}<span class="spectator-badge">👁️ ESPECTADOR</span>{% endif %}</h1>
-    
+
     {% if not player and not is_spectator %}
     <div class="error">
         Você não está nesta sala. Por favor, entre com seu nome.
     </div>
     {% else %}
-    
+
     {% if player %}
     <button id="streamer-toggle" class="streamer-toggle" title="Modo Streamer - Oculta palavra e função">
         📺 Modo Streamer
     </button>
     {% endif %}
-    
+
     <div class="room-container">
-        <div>
+        <div class="room-panel">
             <div class="game-status">
                 <h3>Status: <span id="game-status">{{ game.get_status_display }}</span></h3>
                 <p>Rodada: <span id="current-round">{{ game.current_round }}</span></p>
                 <p>Jogadores: <span id="player-count">{{ game.players.count }}</span>/{{ game.max_players }}</p>
             </div>
-            
-            <h3>Jogadores:</h3>
-            <ul class="players-list" id="players-list">
-                {% for p in players %}
-                <li class="player-item {% if p.is_creator %}creator{% endif %} {% if p.is_eliminated %}eliminated{% endif %}" data-player-id="{{ p.id }}">
-                    {{ p.name }}
-                    {% if p.is_eliminated %}<span style="color: red;">❌</span>{% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-            
-            {% if player.is_creator and game.status == 'waiting' %}
-            <button id="start-btn" class="btn" style="width: 100%; margin-top: 20px;">
-                Iniciar Jogo
-            </button>
-            {% endif %}
+
+            <div>
+                <h3>Jogadores:</h3>
+                <ul class="players-list" id="players-list">
+                    {% for p in players %}
+                    <li class="player-item{% if p.is_creator %} creator{% endif %}{% if p.is_eliminated %} eliminated{% endif %}" data-player-id="{{ p.id }}">
+                        {{ p.name }}
+                        {% if p.is_eliminated %}<span class="danger-text">❌</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div id="game-controls"></div>
         </div>
-        
-        <div>
+
+        <div class="room-panel">
             <div id="word-display" class="word-display" style="display: none;">
                 <div>Sua palavra: <span id="my-word"></span></div>
             </div>
-            
+
             <div id="role-display" class="role-display" style="display: none;">
                 Seu papel: <span id="my-role"></span>
             </div>
-            
+
             <div id="current-turn-display" class="current-turn-display" style="display: none;">
                 <div>É a vez de: <span id="current-turn-player"></span></div>
             </div>
-            
+
             <div id="hints-section">
                 <h3>Dicas:</h3>
                 <div id="hints-list" class="hints-list"></div>
-                
+
                 <div id="hint-input-section" style="display: none;">
                     <div class="hint-input">
                         <label>Digite uma palavra (dica):</label>
                         <input type="text" id="hint-word" placeholder="Digite uma palavra" maxlength="50">
-                        <button id="submit-hint" class="btn" style="width: 100%; margin-top: 10px;">Enviar Dica</button>
+                        <button id="submit-hint" class="btn btn-block">Enviar Dica</button>
                     </div>
                 </div>
             </div>
-            
+
             <div id="voting-section" class="voting-section" style="display: none;">
                 <h3>Votação:</h3>
                 <p>Escolha quem você acha que é o impostor:</p>
                 <div id="vote-buttons"></div>
             </div>
-            
-            <div id="results-section" style="display: none;">
+
+            <div id="results-section" class="results-panel" style="display: none;">
                 <h3>Resultado do Jogo:</h3>
                 <div id="winner-message"></div>
                 <div id="roles-reveal"></div>
-                <div id="auto-delete-timer" style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px; text-align: center; display: none;">
-                    <strong style="color: #f5576c;">⏰ <span id="timer-text">A sala será fechada automaticamente em 60 segundos...</span></strong>
+                <div id="auto-delete-timer" class="timer-card" style="display: none;">
+                    <strong>⏰ <span id="timer-text">A sala será fechada automaticamente em 60 segundos...</span></strong>
                 </div>
-                <div id="game-actions" style="margin-top: 20px; text-align: center;">
-                    <!-- Botões aparecerão aqui apenas para o criador -->
-                </div>
+                <div id="game-actions"></div>
             </div>
         </div>
     </div>
-    
+
     {% endif %}
 </div>
 
@@ -277,22 +252,21 @@ let streamerMode = false;
 let lastHintCount = 0;
 let lastCurrentPlayer = null;
 
-// Função para gerar sons usando Web Audio API
 function playSound(frequency, duration, type = 'sine') {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
-        
+
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
+
         oscillator.frequency.value = frequency;
         oscillator.type = type;
-        
+
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-        
+
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + duration);
     } catch (e) {
@@ -300,41 +274,62 @@ function playSound(frequency, duration, type = 'sine') {
     }
 }
 
-// Som quando alguém dá dica (som curto e agudo)
 function playHintSound() {
     playSound(800, 0.1, 'sine');
     setTimeout(() => playSound(1000, 0.1, 'sine'), 50);
 }
 
-// Som quando é sua vez (som mais longo e diferente)
 function playYourTurnSound() {
     playSound(600, 0.15, 'sine');
     setTimeout(() => playSound(800, 0.15, 'sine'), 100);
     setTimeout(() => playSound(1000, 0.2, 'sine'), 200);
 }
 
+function handlePlayerPing(element) {
+    if (!element) {
+        return;
+    }
+    playYourTurnSound();
+    element.classList.add('pinged');
+    setTimeout(() => element.classList.remove('pinged'), 400);
+}
+
+function attachPlayerPingHandlers() {
+    const playersList = document.getElementById('players-list');
+    if (!playersList) {
+        return;
+    }
+    playersList.querySelectorAll('.player-item.current-turn').forEach(item => {
+        item.addEventListener('click', () => handlePlayerPing(item));
+        item.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handlePlayerPing(item);
+            }
+        });
+    });
+}
+
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/game/${gameCode}/`;
-    
+
     ws = new WebSocket(wsUrl);
-    
+
     ws.onopen = () => {
-        console.log('Conectado ao WebSocket');
         sendMessage({ type: 'get_state' });
     };
-    
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         handleMessage(data);
     };
-    
+
     ws.onerror = (error) => {
         console.error('Erro no WebSocket:', error);
     };
-    
+
     ws.onclose = () => {
-        console.log('Desconectado do WebSocket');
         setTimeout(connectWebSocket, 3000);
     };
 }
@@ -353,35 +348,29 @@ function handleMessage(data) {
     } else if (data.type === 'error') {
         alert(data.message);
     } else if (data.type === 'game_restarted') {
-        // Cancelar timer se existir
         if (autoDeleteTimer) {
             clearInterval(autoDeleteTimer);
             autoDeleteTimer = null;
         }
         document.getElementById('auto-delete-timer').style.display = 'none';
         alert(data.message || 'O jogo foi reiniciado!');
-        // Recarregar estado
         sendMessage({ type: 'get_state' });
     } else if (data.type === 'auto_delete_countdown') {
-        // Atualizar contador visual
         const timerDiv = document.getElementById('auto-delete-timer');
         const timerText = document.getElementById('timer-text');
         if (timerDiv && timerText) {
             timerDiv.style.display = 'block';
+            timerDiv.classList.remove('is-warning', 'is-danger');
             const seconds = data.seconds_remaining || 60;
             timerText.textContent = `A sala será fechada automaticamente em ${seconds} segundos...`;
-            
-            // Mudar cor quando estiver acabando
+
             if (seconds <= 10) {
-                timerDiv.style.background = '#fee';
-                timerText.style.color = '#c33';
+                timerDiv.classList.add('is-danger');
             } else if (seconds <= 30) {
-                timerDiv.style.background = '#fff3cd';
-                timerText.style.color = '#f5576c';
+                timerDiv.classList.add('is-warning');
             }
         }
     } else if (data.type === 'room_closed') {
-        // Cancelar timer se existir
         if (autoDeleteTimer) {
             clearInterval(autoDeleteTimer);
             autoDeleteTimer = null;
@@ -400,15 +389,62 @@ function updateGameState(state) {
     const players = state.players;
     const hints = state.hints;
     const votes = state.votes;
-    
-    // Atualizar status
+
     document.getElementById('game-status').textContent = getStatusText(game.status);
     document.getElementById('current-round').textContent = game.current_round;
     document.getElementById('player-count').textContent = players.length;
+
+    // Controlar botões de iniciar e reiniciar dinamicamente
+    const currentPlayer = players.find(p => p.name === playerName);
+    const gameControls = document.getElementById('game-controls');
     
-    // Atualizar lista de jogadores
+    if (currentPlayer && currentPlayer.is_creator && !isSpectator && gameControls) {
+        if (game.status === 'waiting') {
+            // Mostrar botão de iniciar
+            gameControls.innerHTML = `
+                <button id="start-btn" class="btn btn-block room-action">
+                    Iniciar Jogo
+                </button>
+            `;
+            
+            const startBtn = document.getElementById('start-btn');
+            if (startBtn) {
+                startBtn.onclick = () => {
+                    sendMessage({
+                        type: 'start_game',
+                        player_name: playerName
+                    });
+                };
+            }
+        } else if (game.status !== 'finished') {
+            // Mostrar botão de reiniciar durante o jogo
+            gameControls.innerHTML = `
+                <button id="restart-game-btn" class="btn btn-secondary btn-block room-action">
+                    🔄 Reiniciar Jogo
+                </button>
+            `;
+            
+            const restartBtn = document.getElementById('restart-game-btn');
+            if (restartBtn) {
+                restartBtn.onclick = () => {
+                    if (confirm('Deseja reiniciar o jogo? Todos receberão novas palavras e o jogo começará do zero.')) {
+                        sendMessage({
+                            type: 'restart_game',
+                            player_name: playerName
+                        });
+                    }
+                };
+            }
+        } else {
+            // Limpar botões quando o jogo terminou
+            gameControls.innerHTML = '';
+        }
+    }
+
     const playersList = document.getElementById('players-list');
     const currentTurnPlayer = game.status === 'hints' ? game.current_player : null;
+    const canKick = currentPlayer && currentPlayer.is_creator && !isSpectator && (game.status === 'waiting' || game.status === 'configuring');
+    
     playersList.innerHTML = players.map(p => {
         let classes = 'player-item';
         if (p.is_creator) classes += ' creator';
@@ -416,66 +452,96 @@ function updateGameState(state) {
         if (currentTurnPlayer && p.name === currentTurnPlayer && !p.is_eliminated) {
             classes += ' current-turn';
         }
-        // Revelar WhiteMan quando eliminado
-        const whitemanBadge = p.role === 'whiteman' && p.is_eliminated ? ' <span style="color: #f5576c; font-weight: bold;">⚪ WhiteMan</span>' : '';
-        return `<li class="${classes}" data-player-id="${p.id}">
-            ${p.name}${p.is_eliminated ? ' <span style="color: red;">❌</span>' : ''}${whitemanBadge}
+        // Destacar quem já votou
+        if (game.status === 'voting' && votes.some(v => v.voter_name === p.name)) {
+            classes += ' voted';
+        }
+        const eliminationIcon = p.is_eliminated ? ' <span class="danger-text">❌</span>' : '';
+        const whitemanBadge = p.role === 'whiteman' && p.is_eliminated ? ' <span class="whiteman-badge">⚪ WhiteMan</span>' : '';
+        const isCurrentTurn = currentTurnPlayer && p.name === currentTurnPlayer && !p.is_eliminated;
+        const interactiveAttrs = isCurrentTurn 
+            ? `role="button" tabindex="0" aria-label="Alertar turno de ${p.name}" title="Tocar alerta para ${p.name}"`
+            : '';
+        
+        // Botão de kick apenas para o criador, na sala de espera, e não para si mesmo
+        const kickButton = canKick && p.name !== playerName 
+            ? `<button class="btn-kick" data-player-name="${p.name}" title="Remover jogador">✕</button>`
+            : '';
+        
+        return `<li class="${classes}" data-player-id="${p.id}" ${interactiveAttrs}>
+            <span>${p.name}${eliminationIcon}${whitemanBadge}</span>
+            ${kickButton}
         </li>`;
     }).join('');
     
-    // Mostrar palavra e papel se o jogo começou (não para espectadores)
+    // Adicionar event listeners para os botões de kick
+    if (canKick) {
+        playersList.querySelectorAll('.btn-kick').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetName = btn.dataset.playerName;
+                if (confirm(`Remover ${targetName} da sala?`)) {
+                    sendMessage({
+                        type: 'kick_player',
+                        player_name: playerName,
+                        target_player_name: targetName
+                    });
+                }
+            });
+        });
+    }
+
+    attachPlayerPingHandlers();
+
     if (game.status !== 'waiting' && game.status !== 'configuring' && !isSpectator) {
         const player = players.find(p => p.name === playerName);
         if (player && player.role) {
             const wordDisplay = document.getElementById('word-display');
             const roleDisplay = document.getElementById('role-display');
-            
-            // Aplicar modo streamer se ativado
+
             if (streamerMode) {
                 wordDisplay.style.display = 'none';
                 roleDisplay.style.display = 'none';
             } else {
-                // WhiteMan NÃO sabe que é WhiteMan - vê como Cidadão
                 const displayRole = player.role === 'whiteman' ? 'citizen' : player.role;
                 roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(displayRole)}</span>`;
                 roleDisplay.style.display = 'block';
-                
-                // Mostrar palavra baseado no papel
+
                 if (player.role === 'whiteman') {
-                    // WhiteMan vê sua palavra como se fosse cidadão normal
                     if (player.word) {
                         wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
                     } else {
                         wordDisplay.style.display = 'none';
                     }
                 } else if (player.role === 'impostor') {
-                    wordDisplay.innerHTML = `<div style="color: #f5576c; font-weight: bold;">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" style="color: #f5576c; font-weight: bold;">${player.word || 'N/A'}</span></div>`;
+                    wordDisplay.innerHTML = `<div class="danger-text">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" class="danger-text">${player.word || 'N/A'}</span></div>`;
                 } else if (player.word) {
                     wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
                 } else {
                     wordDisplay.style.display = 'none';
                 }
-                
+
                 wordDisplay.style.display = 'block';
             }
         }
     }
-    
-    // Atualizar dicas
+
     const hintsList = document.getElementById('hints-list');
     hintsList.innerHTML = hints.map(h => {
         return `<div class="hint-item">
             <strong>${h.player_name}</strong> (Rodada ${h.round_number}): ${h.word}
         </div>`;
     }).join('');
-    
-    // Tocar som quando alguém dá dica (se o número de dicas aumentou)
+
     if (hints.length > lastHintCount && game.status === 'hints') {
         playHintSound();
+        // Scroll para a última dica
+        setTimeout(() => {
+            hintsList.scrollTop = hintsList.scrollHeight;
+        }, 50);
     }
     lastHintCount = hints.length;
-    
-    // Mostrar de quem é a vez (visível para TODOS os jogadores)
+
     const currentTurnDisplay = document.getElementById('current-turn-display');
     const currentTurnPlayerSpan = document.getElementById('current-turn-player');
     if (game.status === 'hints' && game.current_player) {
@@ -483,8 +549,7 @@ function updateGameState(state) {
         if (currentPlayer) {
             currentTurnDisplay.style.display = 'block';
             currentTurnPlayerSpan.textContent = game.current_player;
-            
-            // Tocar som quando é sua vez (se mudou)
+
             if (game.current_player === playerName && game.current_player !== lastCurrentPlayer) {
                 playYourTurnSound();
             }
@@ -495,8 +560,7 @@ function updateGameState(state) {
         currentTurnDisplay.style.display = 'none';
     }
     lastCurrentPlayer = game.current_player;
-    
-    // Gerenciar seção de dicas (apenas para o jogador da vez)
+
     const hintInputSection = document.getElementById('hint-input-section');
     if (game.status === 'hints' && game.current_player === playerName && !isSpectator) {
         const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);
@@ -506,16 +570,14 @@ function updateGameState(state) {
     } else {
         hintInputSection.style.display = 'none';
     }
-    
-    // Modo espectador: esconder informações sensíveis
+
     if (isSpectator) {
         document.getElementById('word-display').style.display = 'none';
         document.getElementById('role-display').style.display = 'none';
         document.getElementById('hint-input-section').style.display = 'none';
         document.getElementById('voting-section').style.display = 'none';
     }
-    
-    // Gerenciar votação
+
     const votingSection = document.getElementById('voting-section');
     if (game.status === 'voting') {
         votingSection.style.display = 'block';
@@ -529,8 +591,7 @@ function updateGameState(state) {
                 ${p.name}
             </button>`;
         }).join('');
-        
-        // Adicionar listeners aos botões de voto
+
         voteButtons.querySelectorAll('.vote-button').forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!btn.disabled) {
@@ -545,65 +606,53 @@ function updateGameState(state) {
     } else {
         votingSection.style.display = 'none';
     }
-    
-    // Mostrar resultados se o jogo terminou
+
     const resultsSection = document.getElementById('results-section');
     if (game.status === 'finished') {
         resultsSection.style.display = 'block';
-        
-        // Determinar vencedor
+
         const impostors = players.filter(p => p.role === 'impostor');
         const activeImpostors = impostors.filter(p => !p.is_eliminated);
-        
+
         let winnerMessage = '';
         if (activeImpostors.length === 0) {
             winnerMessage = '🏆 Cidadãos ganharam!';
         } else {
             winnerMessage = '🏆 Impostores ganharam!';
         }
-        
+
         document.getElementById('winner-message').innerHTML = `<h2>${winnerMessage}</h2>`;
-        
-        // Revelar papéis (todos veem os papéis reais no final)
+
         const rolesReveal = document.getElementById('roles-reveal');
         rolesReveal.innerHTML = '<h3>Papéis revelados:</h3>' + 
             players.map(p => {
                 const wordText = p.word ? ` (${p.word})` : '';
-                // Destacar WhiteMan eliminado
-                const whitemanStyle = p.role === 'whiteman' && p.is_eliminated ? ' style="color: #f5576c; font-weight: bold;"' : '';
-                return `<div class="player-item"${whitemanStyle}>
-                    ${p.name}: ${getRoleText(p.role)}${wordText}${p.role === 'whiteman' && p.is_eliminated ? ' ⚠️ Era WhiteMan!' : ''}
+                const whitemanAlert = p.role === 'whiteman' && p.is_eliminated ? ' <span class="whiteman-badge">⚠️ Era WhiteMan!</span>' : '';
+                return `<div class="player-item">
+                    ${p.name}: ${getRoleText(p.role)}${wordText}${whitemanAlert}
                 </div>`;
             }).join('');
-        
-        // Mostrar timer e botões de ação
+
         const timerDiv = document.getElementById('auto-delete-timer');
         if (timerDiv) {
             timerDiv.style.display = 'block';
         }
-        
-        // Mostrar botões de ação apenas para o criador
+
         const currentPlayer = players.find(p => p.name === playerName);
         const gameActions = document.getElementById('game-actions');
         if (currentPlayer && currentPlayer.is_creator) {
-            // Remover listeners antigos se existirem
-            const oldRestartBtn = document.getElementById('restart-btn');
-            const oldCloseBtn = document.getElementById('close-room-btn');
-            if (oldRestartBtn) oldRestartBtn.remove();
-            if (oldCloseBtn) oldCloseBtn.remove();
-            
             gameActions.innerHTML = `
-                <button id="restart-btn" class="btn" style="margin-right: 10px;">
+                <button id="restart-btn" class="btn">
                     🔄 Reiniciar Jogo
                 </button>
                 <button id="close-room-btn" class="btn btn-danger">
                     🗑️ Fechar Sala
                 </button>
             `;
-            
+
             const restartBtn = document.getElementById('restart-btn');
             const closeBtn = document.getElementById('close-room-btn');
-            
+
             if (restartBtn) {
                 restartBtn.onclick = () => {
                     if (confirm('Deseja reiniciar o jogo com os mesmos jogadores?')) {
@@ -614,7 +663,7 @@ function updateGameState(state) {
                     }
                 };
             }
-            
+
             if (closeBtn) {
                 closeBtn.onclick = () => {
                     if (confirm('Tem certeza que deseja fechar a sala? Isso apagará todos os dados do jogo!')) {
@@ -629,12 +678,9 @@ function updateGameState(state) {
             gameActions.innerHTML = '<p>Aguardando o criador da sala reiniciar ou fechar...</p>';
         }
     } else {
-        // Esconder resultados quando o jogo não está finalizado (ex: após reiniciar)
         resultsSection.style.display = 'none';
         document.getElementById('winner-message').innerHTML = '';
         document.getElementById('roles-reveal').innerHTML = '';
-        
-        // Esconder timer também
         const timerDiv = document.getElementById('auto-delete-timer');
         if (timerDiv) {
             timerDiv.style.display = 'none';
@@ -662,7 +708,6 @@ function getRoleText(role) {
     return roleMap[role] || role;
 }
 
-// Modo Streamer - Toggle
 if (playerName && !isSpectator) {
     const streamerToggle = document.getElementById('streamer-toggle');
     if (streamerToggle) {
@@ -671,30 +716,20 @@ if (playerName && !isSpectator) {
             document.body.classList.toggle('streamer-mode', streamerMode);
             streamerToggle.classList.toggle('active', streamerMode);
             streamerToggle.textContent = streamerMode ? '🔓 Modo Normal' : '📺 Modo Streamer';
-            
-            // Atualizar display de palavra/role
+
             const wordDisplay = document.getElementById('word-display');
             const roleDisplay = document.getElementById('role-display');
             if (streamerMode) {
                 wordDisplay.style.display = 'none';
                 roleDisplay.style.display = 'none';
             } else {
-                // Recarregar estado do jogo para mostrar novamente
                 sendMessage({ type: 'get_state' });
             }
         });
     }
 }
 
-// Event listeners
 if (playerName && !isSpectator) {
-    document.getElementById('start-btn')?.addEventListener('click', () => {
-        sendMessage({
-            type: 'start_game',
-            player_name: playerName
-        });
-    });
-    
     document.getElementById('submit-hint')?.addEventListener('click', () => {
         const word = document.getElementById('hint-word').value.trim();
         if (word) {
@@ -706,7 +741,7 @@ if (playerName && !isSpectator) {
             document.getElementById('hint-word').value = '';
         }
     });
-    
+
     document.getElementById('hint-word')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             document.getElementById('submit-hint').click();
@@ -714,10 +749,10 @@ if (playerName && !isSpectator) {
     });
 }
 
-// Conectar WebSocket (para jogadores e espectadores)
 if (playerName || isSpectator) {
     connectWebSocket();
 }
 </script>
 {% endblock %}
+
 

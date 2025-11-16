@@ -6,13 +6,13 @@
 <div class="card">
     <h1>🔐 Criar Superusuário Admin</h1>
     
-    <div id="result-message" style="display: none; padding: 15px; margin: 15px 0; border-radius: 5px;"></div>
+    <div id="result-message" class="feedback" style="display: none;"></div>
     
     <form id="admin-form">
         <label for="token">Token de Segurança:</label>
         <input type="text" id="token" name="token" required placeholder="Token de segurança" 
                value="{{ request.GET.token|default:'' }}">
-        <small style="color: #666; display: block; margin-top: 5px;">
+        <small class="helper-text">
             Token padrão: railway-admin-2024 (ou defina ADMIN_CREATE_TOKEN nas variáveis de ambiente)
         </small>
         
@@ -25,7 +25,7 @@
         <label for="password">Password:</label>
         <input type="password" id="password" name="password" required placeholder="Mínimo 8 caracteres" minlength="8">
         
-        <button type="submit" class="btn" style="width: 100%; margin-top: 20px;">
+        <button type="submit" class="btn btn-block" style="margin-top: 20px;">
             Criar Superusuário
         </button>
     </form>
@@ -48,6 +48,7 @@ document.getElementById('admin-form').addEventListener('submit', async (e) => {
     
     const resultDiv = document.getElementById('result-message');
     resultDiv.style.display = 'none';
+    resultDiv.className = 'feedback';
     
     try {
         const response = await fetch('{% url "create_admin_user" %}', {
@@ -63,28 +64,22 @@ document.getElementById('admin-form').addEventListener('submit', async (e) => {
         resultDiv.style.display = 'block';
         
         if (response.ok && data.success) {
-            resultDiv.style.backgroundColor = '#d4edda';
-            resultDiv.style.color = '#155724';
-            resultDiv.style.border = '1px solid #c3e6cb';
+            resultDiv.className = 'feedback success';
             resultDiv.innerHTML = `
                 <strong>✓ Sucesso!</strong><br>
                 ${data.message}<br>
                 <strong>Username:</strong> ${data.username}<br>
                 <strong>Email:</strong> ${data.email}<br>
-                <a href="${data.admin_url}" style="color: #155724; text-decoration: underline;">Acessar Admin →</a>
+                <a href="${data.admin_url}" class="link-inline">Acessar Admin →</a>
             `;
             document.getElementById('admin-form').reset();
         } else {
-            resultDiv.style.backgroundColor = '#f8d7da';
-            resultDiv.style.color = '#721c24';
-            resultDiv.style.border = '1px solid #f5c6cb';
+            resultDiv.className = 'feedback error';
             resultDiv.innerHTML = `<strong>✗ Erro:</strong> ${data.error || 'Erro desconhecido'}`;
         }
     } catch (error) {
         resultDiv.style.display = 'block';
-        resultDiv.style.backgroundColor = '#f8d7da';
-        resultDiv.style.color = '#721c24';
-        resultDiv.style.border = '1px solid #f5c6cb';
+        resultDiv.className = 'feedback error';
         resultDiv.innerHTML = `<strong>✗ Erro de conexão:</strong> ${error.message}`;
     }
 });
