@@ -51,7 +51,7 @@ document.getElementById('join-form').addEventListener('submit', async (e) => {
         const data = await response.json();
         
         if (response.ok) {
-            window.location.href = data.redirect + '?name=' + encodeURIComponent(formData.player_name);
+            window.location.href = data.redirect;
         } else {
             errorDiv.textContent = data.error || 'Erro ao entrar na sala';
             errorDiv.style.display = 'block';

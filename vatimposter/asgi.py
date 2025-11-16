@@ -11,6 +11,7 @@ import os
 import django
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
+from channels.sessions import SessionMiddlewareStack
 
 # Configurar Django antes de importar qualquer coisa que dependa dele
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'vatimposter.settings')
@@ -22,9 +23,11 @@ import game.routing
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            game.routing.websocket_urlpatterns
+    "websocket": SessionMiddlewareStack(
+        AuthMiddlewareStack(
+            URLRouter(
+                game.routing.websocket_urlpatterns
+            )
         )
     ),
 })

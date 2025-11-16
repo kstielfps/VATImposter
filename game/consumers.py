@@ -22,6 +22,21 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
         
+        # Verificar autenticação via sessão
+        authenticated_player_name = await self.get_authenticated_player_name()
+        if not authenticated_player_name:
+            await self.close()
+            return
+        
+        # Verificar se o jogador existe no jogo
+        player = await self.get_player(game, authenticated_player_name)
+        if not player:
+            await self.close()
+            return
+        
+        # Armazenar player_name autenticado
+        self.authenticated_player_name = authenticated_player_name
+        
         # Entrar no grupo
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -67,7 +82,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
-        player_name = data.get('player_name')
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
         player = await self.get_player(game, player_name)
         
         if not player or not player.is_creator:
@@ -108,7 +131,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
-        player_name = data.get('player_name')
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
         hint_word = data.get('word', '').strip()
         
         if not hint_word:
@@ -175,7 +206,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
-        player_name = data.get('player_name')
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
         target_name = data.get('target_name')
         
         voter = await self.get_player(game, player_name)
@@ -291,7 +330,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
-        player_name = data.get('player_name')
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
         player = await self.get_player(game, player_name)
         
         if not player or not player.is_creator:
@@ -372,7 +419,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
-        player_name = data.get('player_name')
+        # Validar player_name contra sessão autenticada
+        player_name = await self.validate_player_name(data.get('player_name'))
+        if not player_name:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não autorizado'
+            }))
+            return
+        
         player = await self.get_player(game, player_name)
         
         if not player or not player.is_creator:
@@ -651,4 +706,34 @@ class GameConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_current_player(self, game):
         return game.get_current_player()
+    
+    async def get_authenticated_player_name(self):
+        """Obter player_name autenticado da sessão"""
+        # A sessão deve estar disponível via SessionMiddlewareStack
+        session = self.scope.get('session')
+        if session:
+            try:
+                return session.get(f'player_{self.game_code}')
+            except (AttributeError, KeyError, TypeError):
+                pass
+        
+        return None
+    
+    async def validate_player_name(self, provided_name):
+        """Validar se o player_name fornecido corresponde ao autenticado"""
+        if not provided_name:
+            return None
+        
+        authenticated_name = getattr(self, 'authenticated_player_name', None)
+        if not authenticated_name:
+            # Tentar obter da sessão novamente
+            authenticated_name = await self.get_authenticated_player_name()
+            if authenticated_name:
+                self.authenticated_player_name = authenticated_name
+        
+        # Verificar se o nome fornecido corresponde ao autenticado
+        if provided_name == authenticated_name:
+            return authenticated_name
+        
+        return None
 

@@ -54,6 +54,10 @@ def create_game(request):
                 is_creator=True
             )
             
+            # Armazenar autenticação na sessão
+            request.session[f'player_{game.code}'] = creator_name
+            request.session.modified = True
+            
             return JsonResponse({
                 'code': game.code,
                 'redirect': f'/game/{game.code}/'
@@ -114,6 +118,10 @@ def join_game(request):
             name=player_name
         )
         
+        # Armazenar autenticação na sessão
+        request.session[f'player_{game.code}'] = player_name
+        request.session.modified = True
+        
         return JsonResponse({
             'code': game.code,
             'redirect': f'/game/{game.code}/'
@@ -125,15 +133,26 @@ def join_game(request):
 def game_room(request, code):
     """Sala do jogo"""
     game = get_object_or_404(Game, code=code)
-    player_name = request.GET.get('name', '')
     
-    # Verificar se o jogador existe
+    # Obter player_name da sessão (cookie) ao invés do GET parameter
+    player_name = request.session.get(f'player_{code}', '')
+    
+    # Verificar se o jogador existe e está autenticado
     player = None
     if player_name:
         try:
             player = Player.objects.get(game=game, name=player_name)
         except Player.DoesNotExist:
-            pass
+            # Player não existe mais ou sessão inválida
+            # Limpar sessão inválida
+            if f'player_{code}' in request.session:
+                del request.session[f'player_{code}']
+                request.session.modified = True
+            player_name = ''
+    
+    # Se não há player autenticado, redirecionar para página de entrada
+    if not player:
+        return redirect('join_game')
     
     context = {
         'game': game,
