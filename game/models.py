@@ -50,7 +50,8 @@ class Game(models.Model):
     min_players = models.IntegerField(default=4)
     
     # Palavras do jogo
-    word_group = models.ForeignKey(WordGroup, on_delete=models.SET_NULL, null=True, blank=True)
+    word_group = models.ForeignKey(WordGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='citizen_impostor_games')
+    whiteman_word_group = models.ForeignKey(WordGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='whiteman_games')
     citizen_word = models.ForeignKey(Word, on_delete=models.SET_NULL, null=True, blank=True, related_name='citizen_games')
     impostor_word = models.ForeignKey(Word, on_delete=models.SET_NULL, null=True, blank=True, related_name='impostor_games')
     
@@ -91,7 +92,11 @@ class Game(models.Model):
         whitemen = remaining[:self.num_whitemen]
         for player in whitemen:
             player.role = 'whiteman'
-            player.word = None  # WhiteMan não recebe palavra
+            # WhiteMan recebe palavra aleatória de um grupo DIFERENTE
+            if self.whiteman_word_group:
+                whiteman_words = list(self.whiteman_word_group.words.all())
+                if whiteman_words:
+                    player.word = random.choice(whiteman_words)
             player.save()
         
         # Resto são cidadãos
@@ -104,7 +109,7 @@ class Game(models.Model):
     def assign_words(self):
         """Atribui palavras do grupo escolhido"""
         if not self.word_group:
-            # Escolher grupo aleatório
+            # Escolher grupo aleatório para cidadãos/impostores
             groups = WordGroup.objects.filter(words__isnull=False).distinct()
             if not groups.exists():
                 return False
@@ -115,10 +120,19 @@ class Game(models.Model):
             if len(words) < 2:
                 return False
             
-            # Escolher duas palavras diferentes
+            # Escolher duas palavras diferentes para cidadãos e impostores
             self.citizen_word = random.choice(words)
             remaining = [w for w in words if w != self.citizen_word]
             self.impostor_word = random.choice(remaining) if remaining else self.citizen_word
+            
+            # Escolher grupo DIFERENTE para WhiteMan (se houver WhiteMan no jogo)
+            if self.num_whitemen > 0:
+                other_groups = groups.exclude(id=self.word_group.id)
+                if other_groups.exists():
+                    self.whiteman_word_group = random.choice(list(other_groups))
+                else:
+                    # Se não há grupos diferentes, usar o mesmo grupo (caso raro)
+                    self.whiteman_word_group = self.word_group
             
             self.save()
         

@@ -380,6 +380,7 @@ class GameConsumer(AsyncWebsocketConsumer):
                 game_obj.current_round = 0
                 game_obj.current_player_index = 0
                 game_obj.word_group_id = None  # Resetar ForeignKey diretamente
+                game_obj.whiteman_word_group_id = None  # Resetar ForeignKey diretamente
                 game_obj.citizen_word_id = None  # Resetar ForeignKey diretamente
                 game_obj.impostor_word_id = None  # Resetar ForeignKey diretamente
                 game_obj.started_at = None
@@ -506,7 +507,14 @@ class GameConsumer(AsyncWebsocketConsumer):
                 
                 # Apenas jogadores autenticados veem papéis e palavras
                 if not is_spectator:
-                    player_data['role'] = player.role
+                    # WhiteMan NÃO sabe que é WhiteMan enquanto está ativo - vê como Cidadão
+                    # Mas quando é eliminado, TODOS (incluindo ele mesmo) descobrem que era WhiteMan
+                    if player.role == 'whiteman' and not player.is_eliminated:
+                        # WhiteMan ativo vê como citizen (não sabe que é WhiteMan)
+                        player_data['role'] = 'citizen'
+                    else:
+                        # Mostrar papel real (WhiteMan eliminado, cidadãos, impostores)
+                        player_data['role'] = player.role
                     player_data['word'] = word_text
                 else:
                     # Espectadores não veem informações sensíveis

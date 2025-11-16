@@ -416,8 +416,10 @@ function updateGameState(state) {
         if (currentTurnPlayer && p.name === currentTurnPlayer && !p.is_eliminated) {
             classes += ' current-turn';
         }
+        // Revelar WhiteMan quando eliminado
+        const whitemanBadge = p.role === 'whiteman' && p.is_eliminated ? ' <span style="color: #f5576c; font-weight: bold;">⚪ WhiteMan</span>' : '';
         return `<li class="${classes}" data-player-id="${p.id}">
-            ${p.name}${p.is_eliminated ? ' <span style="color: red;">❌</span>' : ''}
+            ${p.name}${p.is_eliminated ? ' <span style="color: red;">❌</span>' : ''}${whitemanBadge}
         </li>`;
     }).join('');
     
@@ -433,13 +435,19 @@ function updateGameState(state) {
                 wordDisplay.style.display = 'none';
                 roleDisplay.style.display = 'none';
             } else {
-                // SEMPRE mostrar o papel do jogador desde o início
-                roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(player.role)}</span>`;
+                // WhiteMan NÃO sabe que é WhiteMan - vê como Cidadão
+                const displayRole = player.role === 'whiteman' ? 'citizen' : player.role;
+                roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(displayRole)}</span>`;
                 roleDisplay.style.display = 'block';
                 
                 // Mostrar palavra baseado no papel
                 if (player.role === 'whiteman') {
-                    wordDisplay.innerHTML = '<div style="color: #f5576c; font-weight: bold;">Você é o WhiteMan - Não recebeu palavra!</div>';
+                    // WhiteMan vê sua palavra como se fosse cidadão normal
+                    if (player.word) {
+                        wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
+                    } else {
+                        wordDisplay.style.display = 'none';
+                    }
                 } else if (player.role === 'impostor') {
                     wordDisplay.innerHTML = `<div style="color: #f5576c; font-weight: bold;">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" style="color: #f5576c; font-weight: bold;">${player.word || 'N/A'}</span></div>`;
                 } else if (player.word) {
@@ -556,13 +564,15 @@ function updateGameState(state) {
         
         document.getElementById('winner-message').innerHTML = `<h2>${winnerMessage}</h2>`;
         
-        // Revelar papéis
+        // Revelar papéis (todos veem os papéis reais no final)
         const rolesReveal = document.getElementById('roles-reveal');
         rolesReveal.innerHTML = '<h3>Papéis revelados:</h3>' + 
             players.map(p => {
                 const wordText = p.word ? ` (${p.word})` : '';
-                return `<div class="player-item">
-                    ${p.name}: ${getRoleText(p.role)}${wordText}
+                // Destacar WhiteMan eliminado
+                const whitemanStyle = p.role === 'whiteman' && p.is_eliminated ? ' style="color: #f5576c; font-weight: bold;"' : '';
+                return `<div class="player-item"${whitemanStyle}>
+                    ${p.name}: ${getRoleText(p.role)}${wordText}${p.role === 'whiteman' && p.is_eliminated ? ' ⚠️ Era WhiteMan!' : ''}
                 </div>`;
             }).join('');
         
