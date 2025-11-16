@@ -547,8 +547,8 @@ function updateGameState(state) {
     }
     
     // Mostrar resultados se o jogo terminou
+    const resultsSection = document.getElementById('results-section');
     if (game.status === 'finished') {
-        const resultsSection = document.getElementById('results-section');
         resultsSection.style.display = 'block';
         
         // Determinar vencedor
@@ -627,6 +627,17 @@ function updateGameState(state) {
             }
         } else {
             gameActions.innerHTML = '<p>Aguardando o criador da sala reiniciar ou fechar...</p>';
+        }
+    } else {
+        // Esconder resultados quando o jogo não está finalizado (ex: após reiniciar)
+        resultsSection.style.display = 'none';
+        document.getElementById('winner-message').innerHTML = '';
+        document.getElementById('roles-reveal').innerHTML = '';
+        
+        // Esconder timer também
+        const timerDiv = document.getElementById('auto-delete-timer');
+        if (timerDiv) {
+            timerDiv.style.display = 'none';
         }
     }
 }
