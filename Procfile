@@ -1,2 +1,2 @@
-web: daphne -b 0.0.0.0 -p $PORT vatimposter.asgi:application
+web: gunicorn vatimposter.wsgi:application --bind 0.0.0.0:$PORT
 

@@ -64,14 +64,12 @@ if USE_TLS:
 # Application definition
 
 INSTALLED_APPS = [
-    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'channels',
     'game',
 ]
 
@@ -105,7 +103,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'vatimposter.wsgi.application'
-ASGI_APPLICATION = 'vatimposter.asgi.application'
 
 
 # Database
@@ -192,12 +189,5 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 # Channels configuration - Usando InMemoryChannelLayer para servidor único
-# Em produção no Railway, ainda funciona com um servidor
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer'
-    },
-}
 

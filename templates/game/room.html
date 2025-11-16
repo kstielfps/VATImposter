@@ -247,7 +247,11 @@
 const gameCode = '{{ game.code }}';
 const playerName = '{{ player.name|default:"" }}';
 const isSpectator = {% if is_spectator %}true{% else %}false{% endif %};
-let ws = null;
+const POLL_INTERVAL_MS = 10000;
+const stateUrl = `/api/game/${gameCode}/state/${isSpectator ? '?spectator=1' : ''}`;
+const apiBaseUrl = `/api/game/${gameCode}`;
+let pollTimer = null;
+let isFetchingState = false;
 let streamerMode = false;
 let lastHintCount = 0;
 let lastCurrentPlayer = null;
@@ -310,85 +314,85 @@ function attachPlayerPingHandlers() {
     });
 }
 
-function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/game/${gameCode}/`;
-
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-        sendMessage({ type: 'get_state' });
-    };
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleMessage(data);
-    };
-
-    ws.onerror = (error) => {
-        console.error('Erro no WebSocket:', error);
-    };
-
-    ws.onclose = () => {
-        setTimeout(connectWebSocket, 3000);
-    };
-}
-
-function sendMessage(data) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(data));
+function handleRoomClosed(data) {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
     }
+    alert(data.message || 'A sala foi fechada.');
+    const redirect = data.redirect || '/';
+    window.location.href = redirect;
 }
 
-let autoDeleteTimer = null;
-
-function handleMessage(data) {
-    if (data.type === 'game_state') {
+async function fetchGameState(showError = false) {
+    if (isFetchingState) {
+        return;
+    }
+    isFetchingState = true;
+    try {
+        const response = await fetch(stateUrl, {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error('Falha ao buscar estado do jogo');
+        }
+        const data = await response.json();
+        if (data.room_closed) {
+            handleRoomClosed(data);
+            return;
+        }
         updateGameState(data);
-    } else if (data.type === 'error') {
-        alert(data.message);
-    } else if (data.type === 'game_restarted') {
-        if (autoDeleteTimer) {
-            clearInterval(autoDeleteTimer);
-            autoDeleteTimer = null;
+    } catch (error) {
+        console.error('Erro ao atualizar estado do jogo:', error);
+        if (showError) {
+            alert('Não foi possível atualizar o estado do jogo. Verifique sua conexão.');
         }
-        document.getElementById('auto-delete-timer').style.display = 'none';
-        alert(data.message || 'O jogo foi reiniciado!');
-        sendMessage({ type: 'get_state' });
-    } else if (data.type === 'auto_delete_countdown') {
-        const timerDiv = document.getElementById('auto-delete-timer');
-        const timerText = document.getElementById('timer-text');
-        if (timerDiv && timerText) {
-            timerDiv.style.display = 'block';
-            timerDiv.classList.remove('is-warning', 'is-danger');
-            const seconds = data.seconds_remaining || 60;
-            timerText.textContent = `A sala será fechada automaticamente em ${seconds} segundos...`;
-
-            if (seconds <= 10) {
-                timerDiv.classList.add('is-danger');
-            } else if (seconds <= 30) {
-                timerDiv.classList.add('is-warning');
-            }
-        }
-    } else if (data.type === 'room_closed') {
-        if (autoDeleteTimer) {
-            clearInterval(autoDeleteTimer);
-            autoDeleteTimer = null;
-        }
-        alert(data.message || 'A sala foi fechada.');
-        if (data.redirect) {
-            setTimeout(() => {
-                window.location.href = data.redirect;
-            }, 1000);
-        }
+    } finally {
+        isFetchingState = false;
     }
+}
+
+async function postAction(action, payload) {
+    try {
+        const response = await fetch(`${apiBaseUrl}/${action}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Falha ao processar ação');
+        }
+        if (data.room_closed) {
+            handleRoomClosed(data);
+            return data;
+        }
+        await fetchGameState();
+        return data;
+    } catch (error) {
+        alert(error.message || 'Erro ao executar ação.');
+        throw error;
+    }
+}
+
+function startPolling() {
+    fetchGameState(true);
+    if (pollTimer) {
+        clearInterval(pollTimer);
+    }
+    pollTimer = setInterval(fetchGameState, POLL_INTERVAL_MS);
 }
 
 function updateGameState(state) {
-    const game = state.game;
-    const players = state.players;
-    const hints = state.hints;
-    const votes = state.votes;
+    const game = state.game || {};
+    const players = state.players || [];
+    const hints = state.hints || [];
+    const votes = state.votes || [];
+    const autoDeleteSeconds = state.auto_delete_seconds;
 
     document.getElementById('game-status').textContent = getStatusText(game.status);
     document.getElementById('current-round').textContent = game.current_round;
@@ -398,45 +402,38 @@ function updateGameState(state) {
     const currentPlayer = players.find(p => p.name === playerName);
     const gameControls = document.getElementById('game-controls');
     
-    if (currentPlayer && currentPlayer.is_creator && !isSpectator && gameControls) {
-        if (game.status === 'waiting') {
-            // Mostrar botão de iniciar
-            gameControls.innerHTML = `
-                <button id="start-btn" class="btn btn-block room-action">
-                    Iniciar Jogo
-                </button>
-            `;
-            
-            const startBtn = document.getElementById('start-btn');
-            if (startBtn) {
-                startBtn.onclick = () => {
-                    sendMessage({
-                        type: 'start_game',
-                        player_name: playerName
+    if (gameControls) {
+        if (currentPlayer && currentPlayer.is_creator && !isSpectator) {
+            if (game.status === 'waiting') {
+                gameControls.innerHTML = `
+                    <button id="start-btn" class="btn btn-block room-action">
+                        Iniciar Jogo
+                    </button>
+                `;
+                const startBtn = document.getElementById('start-btn');
+                if (startBtn) {
+                    startBtn.addEventListener('click', () => {
+                        postAction('start', { player_name: playerName }).catch(() => {});
                     });
-                };
-            }
-        } else if (game.status !== 'finished') {
-            // Mostrar botão de reiniciar durante o jogo
-            gameControls.innerHTML = `
-                <button id="restart-game-btn" class="btn btn-secondary btn-block room-action">
-                    🔄 Reiniciar Jogo
-                </button>
-            `;
-            
-            const restartBtn = document.getElementById('restart-game-btn');
-            if (restartBtn) {
-                restartBtn.onclick = () => {
-                    if (confirm('Deseja reiniciar o jogo? Todos receberão novas palavras e o jogo começará do zero.')) {
-                        sendMessage({
-                            type: 'restart_game',
-                            player_name: playerName
-                        });
-                    }
-                };
+                }
+            } else if (game.status !== 'finished') {
+                gameControls.innerHTML = `
+                    <button id="restart-game-btn" class="btn btn-secondary btn-block room-action">
+                        🔄 Reiniciar Jogo
+                    </button>
+                `;
+                const restartBtn = document.getElementById('restart-game-btn');
+                if (restartBtn) {
+                    restartBtn.addEventListener('click', () => {
+                        if (confirm('Deseja reiniciar o jogo? Todos receberão novas palavras e o jogo começará do zero.')) {
+                            postAction('restart', { player_name: playerName }).catch(() => {});
+                        }
+                    });
+                }
+            } else {
+                gameControls.innerHTML = '';
             }
         } else {
-            // Limpar botões quando o jogo terminou
             gameControls.innerHTML = '';
         }
     }
@@ -481,11 +478,10 @@ function updateGameState(state) {
                 e.stopPropagation();
                 const targetName = btn.dataset.playerName;
                 if (confirm(`Remover ${targetName} da sala?`)) {
-                    sendMessage({
-                        type: 'kick_player',
+                    postAction('kick', {
                         player_name: playerName,
                         target_player_name: targetName
-                    });
+                    }).catch(() => {});
                 }
             });
         });
@@ -579,7 +575,7 @@ function updateGameState(state) {
     }
 
     const votingSection = document.getElementById('voting-section');
-    if (game.status === 'voting') {
+    if (!isSpectator && game.status === 'voting') {
         votingSection.style.display = 'block';
         const activePlayers = players.filter(p => !p.is_eliminated && p.name !== playerName);
         const voteButtons = document.getElementById('vote-buttons');
@@ -595,11 +591,10 @@ function updateGameState(state) {
         voteButtons.querySelectorAll('.vote-button').forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!btn.disabled) {
-                    sendMessage({
-                        type: 'submit_vote',
+                    postAction('vote', {
                         player_name: playerName,
                         target_name: btn.dataset.target
-                    });
+                    }).catch(() => {});
                 }
             });
         });
@@ -633,10 +628,7 @@ function updateGameState(state) {
                 </div>`;
             }).join('');
 
-        const timerDiv = document.getElementById('auto-delete-timer');
-        if (timerDiv) {
-            timerDiv.style.display = 'block';
-        }
+        renderAutoDeleteTimer(autoDeleteSeconds);
 
         const currentPlayer = players.find(p => p.name === playerName);
         const gameActions = document.getElementById('game-actions');
@@ -656,10 +648,9 @@ function updateGameState(state) {
             if (restartBtn) {
                 restartBtn.onclick = () => {
                     if (confirm('Deseja reiniciar o jogo com os mesmos jogadores?')) {
-                        sendMessage({
-                            type: 'restart_game',
+                        postAction('restart', {
                             player_name: playerName
-                        });
+                        }).catch(() => {});
                     }
                 };
             }
@@ -667,10 +658,9 @@ function updateGameState(state) {
             if (closeBtn) {
                 closeBtn.onclick = () => {
                     if (confirm('Tem certeza que deseja fechar a sala? Isso apagará todos os dados do jogo!')) {
-                        sendMessage({
-                            type: 'close_room',
+                        postAction('close', {
                             player_name: playerName
-                        });
+                        }).catch(() => {});
                     }
                 };
             }
@@ -681,10 +671,7 @@ function updateGameState(state) {
         resultsSection.style.display = 'none';
         document.getElementById('winner-message').innerHTML = '';
         document.getElementById('roles-reveal').innerHTML = '';
-        const timerDiv = document.getElementById('auto-delete-timer');
-        if (timerDiv) {
-            timerDiv.style.display = 'none';
-        }
+        renderAutoDeleteTimer(null);
     }
 }
 
@@ -708,6 +695,37 @@ function getRoleText(role) {
     return roleMap[role] || role;
 }
 
+function renderAutoDeleteTimer(remainingSeconds) {
+    const timerDiv = document.getElementById('auto-delete-timer');
+    const timerText = document.getElementById('timer-text');
+    if (!timerDiv || !timerText) {
+        return;
+    }
+
+    timerDiv.classList.remove('is-warning', 'is-danger');
+
+    if (remainingSeconds === null || remainingSeconds === undefined) {
+        timerDiv.style.display = 'none';
+        timerText.textContent = '';
+        return;
+    }
+
+    timerDiv.style.display = 'block';
+
+    if (remainingSeconds <= 10) {
+        timerDiv.classList.add('is-danger');
+    } else if (remainingSeconds <= 20) {
+        timerDiv.classList.add('is-warning');
+    }
+
+    if (remainingSeconds <= 0) {
+        timerText.textContent = 'A sala será fechada a qualquer momento...';
+    } else {
+        const label = remainingSeconds === 1 ? '1 segundo' : `${remainingSeconds} segundos`;
+        timerText.textContent = `A sala será fechada automaticamente em ${label}...`;
+    }
+}
+
 if (playerName && !isSpectator) {
     const streamerToggle = document.getElementById('streamer-toggle');
     if (streamerToggle) {
@@ -723,34 +741,51 @@ if (playerName && !isSpectator) {
                 wordDisplay.style.display = 'none';
                 roleDisplay.style.display = 'none';
             } else {
-                sendMessage({ type: 'get_state' });
+                fetchGameState(true);
             }
         });
     }
 }
 
 if (playerName && !isSpectator) {
-    document.getElementById('submit-hint')?.addEventListener('click', () => {
-        const word = document.getElementById('hint-word').value.trim();
-        if (word) {
-            sendMessage({
-                type: 'submit_hint',
-                player_name: playerName,
-                word: word
-            });
-            document.getElementById('hint-word').value = '';
-        }
-    });
+    const submitHintBtn = document.getElementById('submit-hint');
+    const hintInput = document.getElementById('hint-word');
 
-    document.getElementById('hint-word')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            document.getElementById('submit-hint').click();
-        }
-    });
+    if (submitHintBtn && hintInput) {
+        submitHintBtn.addEventListener('click', async () => {
+            const word = hintInput.value.trim();
+            if (!word) {
+                return;
+            }
+            submitHintBtn.disabled = true;
+            try {
+                await postAction('hint', {
+                    player_name: playerName,
+                    word: word
+                });
+                hintInput.value = '';
+            } catch (error) {
+                console.error('Erro ao enviar dica:', error);
+            } finally {
+                submitHintBtn.disabled = false;
+            }
+        });
+
+        hintInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitHintBtn.click();
+            }
+        });
+    }
 }
 
 if (playerName || isSpectator) {
-    connectWebSocket();
+    startPolling();
+    window.addEventListener('beforeunload', () => {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+        }
+    });
 }
 </script>
 {% endblock %}
