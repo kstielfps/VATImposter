@@ -271,7 +271,7 @@
 <script>
 const gameCode = '{{ game.code }}';
 const playerName = '{{ player.name|default:"" }}';
-const isSpectator = {{ 'true' if is_spectator else 'false' }};
+const isSpectator = {% if is_spectator %}true{% else %}false{% endif %};
 let ws = null;
 let streamerMode = false;
 let lastHintCount = 0;
