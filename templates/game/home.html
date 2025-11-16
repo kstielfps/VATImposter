@@ -1,26 +1,111 @@
 {% extends 'base.html' %}
 
-{% block title %}VAT Imposter - Início{% endblock %}
+{% block title %}VATGames - Escolha seu Jogo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .games-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 30px;
+        margin-top: 30px;
+    }
+    
+    .game-card {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        transition: transform 0.3s, box-shadow 0.3s;
+        cursor: pointer;
+        border: 3px solid transparent;
+    }
+    
+    .game-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        border-color: #667eea;
+    }
+    
+    .game-card h2 {
+        color: #667eea;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+    
+    .game-card .description {
+        color: #666;
+        margin-bottom: 20px;
+        text-align: center;
+        line-height: 1.6;
+    }
+    
+    .game-card .game-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .game-card .game-actions .btn {
+        flex: 1;
+        min-width: 120px;
+    }
+    
+    .coming-soon {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+    
+    .coming-soon::after {
+        content: "Em Breve";
+        display: block;
+        text-align: center;
+        margin-top: 10px;
+        color: #999;
+        font-style: italic;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h1>🎮 VAT Imposter</h1>
-    <p style="text-align: center; margin-bottom: 30px; font-size: 18px;">
-        Descubra quem é o impostor através das dicas!
+    <h1>🎮 VATGames</h1>
+    <p style="text-align: center; margin-bottom: 30px; font-size: 18px; color: #666;">
+        Escolha um jogo para começar a diversão!
     </p>
-    
-    <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-        <a href="{% url 'create_game' %}" class="btn">
-            ➕ Criar Sala
-        </a>
-        <a href="{% url 'join_game' %}" class="btn btn-secondary">
-            🔑 Entrar com Código
-        </a>
+</div>
+
+<div class="games-grid">
+    <!-- VAT Imposter -->
+    <div class="game-card">
+        <h2>🕵️ VAT Imposter</h2>
+        <p class="description">
+            Descubra quem é o impostor através das dicas! Um jogo de dedução e estratégia onde você precisa descobrir quem está mentindo.
+        </p>
+        <div class="game-actions">
+            <a href="{% url 'create_game' %}" class="btn">
+                ➕ Criar Sala
+            </a>
+            <a href="{% url 'join_game' %}" class="btn btn-secondary">
+                🔑 Entrar
+            </a>
+        </div>
     </div>
+    
+    <!-- Future games can be added here -->
+    <!-- Example:
+    <div class="game-card coming-soon">
+        <h2>🎯 Novo Jogo</h2>
+        <p class="description">
+            Descrição do novo jogo que será adicionado em breve.
+        </p>
+    </div>
+    -->
 </div>
 
 <div class="card">
-    <h2>📖 Como Jogar</h2>
+    <h2>📖 Como Jogar VAT Imposter</h2>
     <ol style="line-height: 2; padding-left: 20px;">
         <li><strong>Cidadãos:</strong> Recebem a palavra correta. Tentem descobrir quem é o impostor!</li>
         <li><strong>Impostor:</strong> Recebe uma palavra diferente. Finge que conhece a palavra correta!</li>
