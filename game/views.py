@@ -138,6 +138,20 @@ def game_room(request, code):
     """Sala do jogo"""
     game = get_object_or_404(Game, code=code)
     
+    # Modo espectador: permite assistir sem autenticação
+    is_spectator = request.GET.get('spectator') == '1'
+    
+    if is_spectator:
+        # Modo espectador - não precisa de autenticação
+        context = {
+            'game': game,
+            'player': None,
+            'players': game.players.all(),
+            'is_spectator': True,
+        }
+        return render(request, 'game/room.html', context)
+    
+    # Modo normal - requer autenticação
     # Obter player_name da sessão (cookie) ao invés do GET parameter
     # A chave da sessão inclui o código da sala, então cada sala tem sua própria
     # autenticação independente, permitindo o mesmo nome em salas diferentes
@@ -164,6 +178,7 @@ def game_room(request, code):
         'game': game,
         'player': player,
         'players': game.players.all(),
+        'is_spectator': False,
     }
     
     return render(request, 'game/room.html', context)

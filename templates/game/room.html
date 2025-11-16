@@ -132,18 +132,67 @@
     .player-item.current-turn::before {
         content: "👉 ";
     }
+    
+    .streamer-mode .word-display,
+    .streamer-mode .role-display {
+        display: none !important;
+    }
+    
+    .streamer-mode .word-display::before {
+        content: "🔒 Informação Ocultada";
+    }
+    
+    .streamer-toggle {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: rgba(102, 126, 234, 0.9);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-weight: bold;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .streamer-toggle:hover {
+        background: rgba(102, 126, 234, 1);
+    }
+    
+    .streamer-toggle.active {
+        background: rgba(245, 87, 108, 0.9);
+    }
+    
+    .spectator-badge {
+        background: #f5576c;
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 10px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card">
-    <h1>Sala: {{ game.code }}</h1>
+    <h1>Sala: {{ game.code }}{% if is_spectator %}<span class="spectator-badge">👁️ ESPECTADOR</span>{% endif %}</h1>
     
-    {% if not player %}
+    {% if not player and not is_spectator %}
     <div class="error">
         Você não está nesta sala. Por favor, entre com seu nome.
     </div>
     {% else %}
+    
+    {% if player %}
+    <button id="streamer-toggle" class="streamer-toggle" title="Modo Streamer - Oculta palavra e função">
+        📺 Modo Streamer
+    </button>
+    {% endif %}
     
     <div class="room-container">
         <div>
@@ -222,7 +271,47 @@
 <script>
 const gameCode = '{{ game.code }}';
 const playerName = '{{ player.name|default:"" }}';
+const isSpectator = {{ 'true' if is_spectator else 'false' }};
 let ws = null;
+let streamerMode = false;
+let lastHintCount = 0;
+let lastCurrentPlayer = null;
+
+// Função para gerar sons usando Web Audio API
+function playSound(frequency, duration, type = 'sine') {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = frequency;
+        oscillator.type = type;
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration);
+    } catch (e) {
+        console.log('Audio não disponível:', e);
+    }
+}
+
+// Som quando alguém dá dica (som curto e agudo)
+function playHintSound() {
+    playSound(800, 0.1, 'sine');
+    setTimeout(() => playSound(1000, 0.1, 'sine'), 50);
+}
+
+// Som quando é sua vez (som mais longo e diferente)
+function playYourTurnSound() {
+    playSound(600, 0.15, 'sine');
+    setTimeout(() => playSound(800, 0.15, 'sine'), 100);
+    setTimeout(() => playSound(1000, 0.2, 'sine'), 200);
+}
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -332,29 +421,35 @@ function updateGameState(state) {
         </li>`;
     }).join('');
     
-    // Mostrar palavra e papel se o jogo começou
-    if (game.status !== 'waiting' && game.status !== 'configuring') {
+    // Mostrar palavra e papel se o jogo começou (não para espectadores)
+    if (game.status !== 'waiting' && game.status !== 'configuring' && !isSpectator) {
         const player = players.find(p => p.name === playerName);
         if (player && player.role) {
             const wordDisplay = document.getElementById('word-display');
             const roleDisplay = document.getElementById('role-display');
             
-            // SEMPRE mostrar o papel do jogador desde o início
-            roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(player.role)}</span>`;
-            roleDisplay.style.display = 'block';
-            
-            // Mostrar palavra baseado no papel
-            if (player.role === 'whiteman') {
-                wordDisplay.innerHTML = '<div style="color: #f5576c; font-weight: bold;">Você é o WhiteMan - Não recebeu palavra!</div>';
-            } else if (player.role === 'impostor') {
-                wordDisplay.innerHTML = `<div style="color: #f5576c; font-weight: bold;">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" style="color: #f5576c; font-weight: bold;">${player.word || 'N/A'}</span></div>`;
-            } else if (player.word) {
-                wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
-            } else {
+            // Aplicar modo streamer se ativado
+            if (streamerMode) {
                 wordDisplay.style.display = 'none';
+                roleDisplay.style.display = 'none';
+            } else {
+                // SEMPRE mostrar o papel do jogador desde o início
+                roleDisplay.innerHTML = `Seu papel: <span id="my-role">${getRoleText(player.role)}</span>`;
+                roleDisplay.style.display = 'block';
+                
+                // Mostrar palavra baseado no papel
+                if (player.role === 'whiteman') {
+                    wordDisplay.innerHTML = '<div style="color: #f5576c; font-weight: bold;">Você é o WhiteMan - Não recebeu palavra!</div>';
+                } else if (player.role === 'impostor') {
+                    wordDisplay.innerHTML = `<div style="color: #f5576c; font-weight: bold;">⚠️ VOCÊ É O IMPOSTOR!</div><div>Sua palavra (diferente dos cidadãos): <span id="my-word" style="color: #f5576c; font-weight: bold;">${player.word || 'N/A'}</span></div>`;
+                } else if (player.word) {
+                    wordDisplay.innerHTML = `<div>Sua palavra: <span id="my-word">${player.word}</span></div>`;
+                } else {
+                    wordDisplay.style.display = 'none';
+                }
+                
+                wordDisplay.style.display = 'block';
             }
-            
-            wordDisplay.style.display = 'block';
         }
     }
     
@@ -366,6 +461,12 @@ function updateGameState(state) {
         </div>`;
     }).join('');
     
+    // Tocar som quando alguém dá dica (se o número de dicas aumentou)
+    if (hints.length > lastHintCount && game.status === 'hints') {
+        playHintSound();
+    }
+    lastHintCount = hints.length;
+    
     // Mostrar de quem é a vez (visível para TODOS os jogadores)
     const currentTurnDisplay = document.getElementById('current-turn-display');
     const currentTurnPlayerSpan = document.getElementById('current-turn-player');
@@ -374,22 +475,36 @@ function updateGameState(state) {
         if (currentPlayer) {
             currentTurnDisplay.style.display = 'block';
             currentTurnPlayerSpan.textContent = game.current_player;
+            
+            // Tocar som quando é sua vez (se mudou)
+            if (game.current_player === playerName && game.current_player !== lastCurrentPlayer) {
+                playYourTurnSound();
+            }
         } else {
             currentTurnDisplay.style.display = 'none';
         }
     } else {
         currentTurnDisplay.style.display = 'none';
     }
+    lastCurrentPlayer = game.current_player;
     
     // Gerenciar seção de dicas (apenas para o jogador da vez)
     const hintInputSection = document.getElementById('hint-input-section');
-    if (game.status === 'hints' && game.current_player === playerName) {
+    if (game.status === 'hints' && game.current_player === playerName && !isSpectator) {
         const currentPlayer = players.find(p => p.name === game.current_player && !p.is_eliminated);
         if (currentPlayer) {
             hintInputSection.style.display = 'block';
         }
     } else {
         hintInputSection.style.display = 'none';
+    }
+    
+    // Modo espectador: esconder informações sensíveis
+    if (isSpectator) {
+        document.getElementById('word-display').style.display = 'none';
+        document.getElementById('role-display').style.display = 'none';
+        document.getElementById('hint-input-section').style.display = 'none';
+        document.getElementById('voting-section').style.display = 'none';
     }
     
     // Gerenciar votação
@@ -526,8 +641,32 @@ function getRoleText(role) {
     return roleMap[role] || role;
 }
 
+// Modo Streamer - Toggle
+if (playerName && !isSpectator) {
+    const streamerToggle = document.getElementById('streamer-toggle');
+    if (streamerToggle) {
+        streamerToggle.addEventListener('click', () => {
+            streamerMode = !streamerMode;
+            document.body.classList.toggle('streamer-mode', streamerMode);
+            streamerToggle.classList.toggle('active', streamerMode);
+            streamerToggle.textContent = streamerMode ? '🔓 Modo Normal' : '📺 Modo Streamer';
+            
+            // Atualizar display de palavra/role
+            const wordDisplay = document.getElementById('word-display');
+            const roleDisplay = document.getElementById('role-display');
+            if (streamerMode) {
+                wordDisplay.style.display = 'none';
+                roleDisplay.style.display = 'none';
+            } else {
+                // Recarregar estado do jogo para mostrar novamente
+                sendMessage({ type: 'get_state' });
+            }
+        });
+    }
+}
+
 // Event listeners
-if (playerName) {
+if (playerName && !isSpectator) {
     document.getElementById('start-btn')?.addEventListener('click', () => {
         sendMessage({
             type: 'start_game',
@@ -552,7 +691,10 @@ if (playerName) {
             document.getElementById('submit-hint').click();
         }
     });
-    
+}
+
+// Conectar WebSocket (para jogadores e espectadores)
+if (playerName || isSpectator) {
     connectWebSocket();
 }
 </script>

@@ -24,20 +24,23 @@ class GameConsumer(AsyncWebsocketConsumer):
         
         # Verificar autenticação via sessão
         authenticated_player_name = await self.get_authenticated_player_name()
-        if not authenticated_player_name:
-            await self.close()
-            return
         
-        # Verificar se o jogador existe no jogo
-        player = await self.get_player(game, authenticated_player_name)
-        if not player:
-            await self.close()
-            return
+        # Permitir conexão mesmo sem autenticação (modo espectador)
+        # Se não houver autenticação, será tratado como espectador
+        if authenticated_player_name:
+            # Verificar se o jogador existe no jogo
+            player = await self.get_player(game, authenticated_player_name)
+            if player:
+                # Armazenar player_name autenticado
+                self.authenticated_player_name = authenticated_player_name
+            else:
+                # Jogador não existe, tratar como espectador
+                self.authenticated_player_name = None
+        else:
+            # Sem autenticação, modo espectador
+            self.authenticated_player_name = None
         
-        # Armazenar player_name autenticado
-        self.authenticated_player_name = authenticated_player_name
-        
-        # Entrar no grupo
+        # Entrar no grupo (jogadores e espectadores)
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
@@ -480,6 +483,9 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not game:
             return
         
+        # Verificar se é espectador (sem autenticação)
+        is_spectator = not hasattr(self, 'authenticated_player_name') or not self.authenticated_player_name
+        
         players_data = []
         # Buscar players com select_related para evitar queries adicionais
         def get_players_data():
@@ -487,17 +493,27 @@ class GameConsumer(AsyncWebsocketConsumer):
             result = []
             for player in players_list:
                 word_text = None
-                if hasattr(player, 'word') and player.word:
+                # Espectadores não veem palavras/papéis
+                if not is_spectator and hasattr(player, 'word') and player.word:
                     word_text = player.word.text
-                result.append({
+                
+                player_data = {
                     'id': player.id,
                     'name': player.name,
-                    # Sempre enviar o papel - o frontend mostra apenas para o próprio jogador
-                    'role': player.role,
-                    'word': word_text,
                     'is_eliminated': player.is_eliminated,
                     'is_creator': player.is_creator,
-                })
+                }
+                
+                # Apenas jogadores autenticados veem papéis e palavras
+                if not is_spectator:
+                    player_data['role'] = player.role
+                    player_data['word'] = word_text
+                else:
+                    # Espectadores não veem informações sensíveis
+                    player_data['role'] = None
+                    player_data['word'] = None
+                
+                result.append(player_data)
             return result
         
         players_data = await database_sync_to_async(get_players_data)()
@@ -550,16 +566,26 @@ class GameConsumer(AsyncWebsocketConsumer):
             if active_players_list and 0 <= game_obj.current_player_index < len(active_players_list):
                 current_player_name = active_players_list[game_obj.current_player_index].name
             
-            return {
+            game_data = {
                 'code': game_obj.code,
                 'status': game_obj.status,
                 'current_round': game_obj.current_round,
                 'current_player': current_player_name,
                 'num_impostors': game_obj.num_impostors,
                 'num_whitemen': game_obj.num_whitemen,
-                'citizen_word': citizen_word_text,
-                'impostor_word': impostor_word_text,
             }
+            
+            # Espectadores não veem as palavras do jogo
+            # Usar variável capturada do escopo externo
+            spectator_mode = is_spectator
+            if not spectator_mode:
+                game_data['citizen_word'] = citizen_word_text
+                game_data['impostor_word'] = impostor_word_text
+            else:
+                game_data['citizen_word'] = None
+                game_data['impostor_word'] = None
+            
+            return game_data
         
         game_data = await database_sync_to_async(get_game_data)()
         
