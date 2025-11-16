@@ -11,7 +11,7 @@ import traceback
 import os
 import logging
 import random
-from .models import Game, Player, Hint, Vote, sort_players_for_display
+from .models import Game, Player, Hint, Vote, Nudge, sort_players_for_display
 
 User = get_user_model()
 
@@ -303,7 +303,7 @@ def _validate_player_action(request, game, provided_name):
     return player
 
 
-def _serialize_game_state(game, is_spectator):
+def _serialize_game_state(game, is_spectator, player_name=None):
     players_qs = game.players.select_related('word').all()
     players_list = sort_players_for_display(game.code, players_qs)
     players_data = []
@@ -347,6 +347,32 @@ def _serialize_game_state(game, is_spectator):
         .select_related('voter', 'target')
     ]
 
+    # Get pending nudges for this player
+    nudges_data = []
+    if player_name and not is_spectator:
+        try:
+            current_player = Player.objects.get(game=game, name=player_name)
+            pending_nudges = Nudge.objects.filter(
+                game=game,
+                to_player=current_player,
+                acknowledged=False
+            ).select_related('from_player')
+            
+            nudges_data = [
+                {
+                    'id': nudge.id,
+                    'from_player': nudge.from_player.name,
+                    'created_at': nudge.created_at.isoformat(),
+                }
+                for nudge in pending_nudges
+            ]
+            
+            # Mark nudges as acknowledged
+            if nudges_data:
+                pending_nudges.update(acknowledged=True)
+        except Player.DoesNotExist:
+            pass
+
     active_players = list(game.get_active_players())
     current_player_name = None
     if active_players and 0 <= game.current_player_index < len(active_players):
@@ -372,6 +398,7 @@ def _serialize_game_state(game, is_spectator):
         'players': players_data,
         'hints': hints_data,
         'votes': votes_data,
+        'nudges': nudges_data,
     }
 
 
@@ -431,8 +458,9 @@ def game_state_api(request, code):
     spectator_flag = request.GET.get('spectator') == '1'
     player, _ = _get_session_player(request, game)
     is_spectator = spectator_flag or player is None
+    player_name = player.name if player else None
 
-    data = _serialize_game_state(game, is_spectator)
+    data = _serialize_game_state(game, is_spectator, player_name)
     remaining = _remaining_auto_delete_seconds(game)
     data['auto_delete_seconds'] = remaining
 
@@ -655,6 +683,42 @@ def kick_player_api(request, code):
             return _json_error('Jogador não encontrado', status=404)
 
     return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def nudge_player_api(request, code):
+    game = get_object_or_404(Game, code=code)
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return _json_error('Dados inválidos')
+
+    player = _validate_player_action(request, game, payload.get('player_name'))
+    if not player:
+        return _json_error('Não autorizado', status=403)
+
+    target_name = payload.get('target_player_name')
+    if not target_name:
+        return _json_error('Jogador alvo não especificado')
+
+    try:
+        target = Player.objects.get(game=game, name=target_name)
+    except Player.DoesNotExist:
+        return _json_error('Jogador alvo não encontrado', status=404)
+
+    if target.name == player.name:
+        return _json_error('Você não pode enviar nudge para si mesmo')
+
+    # Create nudge notification
+    Nudge.objects.create(
+        game=game,
+        from_player=player,
+        to_player=target
+    )
+
+    return JsonResponse({'success': True})
+
 
 
 

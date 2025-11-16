@@ -253,6 +253,22 @@ class Vote(models.Model):
         unique_together = [['game', 'voter', 'round_number']]
 
 
+class Nudge(models.Model):
+    """Notificação de nudge/ping entre jogadores"""
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='nudges')
+    from_player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='nudges_sent')
+    to_player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='nudges_received')
+    created_at = models.DateTimeField(auto_now_add=True)
+    acknowledged = models.BooleanField(default=False)  # Se o jogador já viu/ouviu o nudge
+
+    def __str__(self):
+        return f"{self.from_player.name} → {self.to_player.name}"
+
+    class Meta:
+        verbose_name = "Nudge"
+        verbose_name_plural = "Nudges"
+
+
 
 def sort_players_for_display(game_code, players):
     """Return players sorted in a deterministic but role-agnostic order."""

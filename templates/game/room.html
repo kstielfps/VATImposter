@@ -289,15 +289,23 @@ function playYourTurnSound() {
     setTimeout(() => playSound(1000, 0.2, 'sine'), 200);
 }
 
-function handlePlayerPing(element) {
+function handlePlayerPing(element, targetPlayerName) {
     if (!element) {
         console.log('handlePlayerPing called with no element');
         return;
     }
-    console.log('Playing ping sound for:', element.textContent);
+    console.log('Sending nudge to:', targetPlayerName);
+    
+    // Visual feedback immediately
     playYourTurnSound();
     element.classList.add('pinged');
     setTimeout(() => element.classList.remove('pinged'), 400);
+    
+    // Send nudge to server so the target player receives it
+    postAction('nudge', {
+        player_name: playerName,
+        target_player_name: targetPlayerName
+    }).catch(() => {});
 }
 
 function attachPlayerPingHandlers() {
@@ -313,11 +321,14 @@ function attachPlayerPingHandlers() {
         const newItem = item.cloneNode(true);
         item.parentNode.replaceChild(newItem, item);
         
-        newItem.addEventListener('click', () => handlePlayerPing(newItem));
+        // Get the player name from the text content (remove extra badges/icons)
+        const playerNameText = newItem.querySelector('span')?.textContent.trim().split(/\s/)[0] || '';
+        
+        newItem.addEventListener('click', () => handlePlayerPing(newItem, playerNameText));
         newItem.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                handlePlayerPing(newItem);
+                handlePlayerPing(newItem, playerNameText);
             }
         });
     });
@@ -401,7 +412,23 @@ function updateGameState(state) {
     const players = state.players || [];
     const hints = state.hints || [];
     const votes = state.votes || [];
+    const nudges = state.nudges || [];
     const autoDeleteSeconds = state.auto_delete_seconds;
+
+    // Handle nudges - play sound for each new nudge
+    if (nudges.length > 0) {
+        nudges.forEach(nudge => {
+            console.log('Received nudge from:', nudge.from_player);
+            playYourTurnSound();
+            // Show a brief notification
+            if (Notification && Notification.permission === 'granted') {
+                new Notification('VATImposter', {
+                    body: `${nudge.from_player} está chamando sua atenção!`,
+                    icon: '/static/icon.png'
+                });
+            }
+        });
+    }
 
     document.getElementById('game-status').textContent = getStatusText(game.status);
     document.getElementById('current-round').textContent = game.current_round;

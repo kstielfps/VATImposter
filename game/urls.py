@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/game/<str:code>/restart/', views.restart_game_api, name='restart_game_api'),
     path('api/game/<str:code>/close/', views.close_room_api, name='close_room_api'),
     path('api/game/<str:code>/kick/', views.kick_player_api, name='kick_player_api'),
+    path('api/game/<str:code>/nudge/', views.nudge_player_api, name='nudge_player_api'),
 ]
 
 
