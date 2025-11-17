@@ -444,21 +444,27 @@ small {
 }
 
 .streamer-toggle {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    z-index: 1000;
-    border-radius: 999px;
+    border-radius: 12px;
     padding: 10px 20px;
     border: 1px solid rgba(77, 212, 255, 0.35);
     background: rgba(6, 9, 15, 0.85);
     color: var(--text-100);
     backdrop-filter: blur(18px);
-    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.streamer-toggle:hover {
+    background: rgba(6, 9, 15, 0.95);
+    border-color: rgba(77, 212, 255, 0.5);
+    transform: translateY(-2px);
 }
 
 .streamer-toggle.active {
     border-color: rgba(255, 77, 109, 0.6);
+    background: rgba(255, 77, 109, 0.1);
     color: #ffb8c9;
 }
 
@@ -512,11 +518,5 @@ small {
 
     .card {
         padding: 24px;
-    }
-
-    .streamer-toggle {
-        position: static;
-        width: 100%;
-        margin-bottom: 16px;
     }
 }
