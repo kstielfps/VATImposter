@@ -154,12 +154,60 @@
     .player-item > span:first-child {
         flex: 1;
     }
+
+    .room-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .room-header h1 {
+        margin: 0;
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .share-link-btn {
+        background: linear-gradient(135deg, rgba(77, 212, 255, 0.2), rgba(45, 211, 111, 0.2));
+        border: 1px solid rgba(77, 212, 255, 0.4);
+        color: var(--text-100);
+        padding: 10px 20px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+    }
+
+    .share-link-btn:hover {
+        background: linear-gradient(135deg, rgba(77, 212, 255, 0.3), rgba(45, 211, 111, 0.3));
+        border-color: rgba(77, 212, 255, 0.6);
+        transform: translateY(-2px);
+    }
+
+    .share-link-btn.copied {
+        background: linear-gradient(135deg, rgba(45, 211, 111, 0.3), rgba(45, 211, 111, 0.2));
+        border-color: rgba(45, 211, 111, 0.6);
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card">
-    <h1>Sala: {{ game.code }}{% if is_spectator %}<span class="spectator-badge">👁️ ESPECTADOR</span>{% endif %}</h1>
+    <div class="room-header">
+        <h1>Sala: {{ game.code }}{% if is_spectator %}<span class="spectator-badge">👁️ ESPECTADOR</span>{% endif %}</h1>
+        {% if not is_spectator %}
+        <button id="share-link-btn" class="share-link-btn" title="Copiar link para compartilhar">
+            🔗 Compartilhar Link
+        </button>
+        {% endif %}
+    </div>
 
     {% if not player and not is_spectator %}
     <div class="error">
@@ -820,6 +868,48 @@ if (playerName || isSpectator) {
     window.addEventListener('beforeunload', () => {
         if (pollTimer) {
             clearInterval(pollTimer);
+        }
+    });
+}
+
+// Share Link button
+const shareLinkBtn = document.getElementById('share-link-btn');
+if (shareLinkBtn) {
+    shareLinkBtn.addEventListener('click', async () => {
+        const shareUrl = `${window.location.origin}/join/?code=${gameCode}`;
+        
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(shareUrl);
+                shareLinkBtn.textContent = '✅ Link Copiado!';
+                shareLinkBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    shareLinkBtn.textContent = '🔗 Compartilhar Link';
+                    shareLinkBtn.classList.remove('copied');
+                }, 2000);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = shareUrl;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                shareLinkBtn.textContent = '✅ Link Copiado!';
+                shareLinkBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    shareLinkBtn.textContent = '🔗 Compartilhar Link';
+                    shareLinkBtn.classList.remove('copied');
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Erro ao copiar link:', err);
+            alert(`Link para compartilhar:\n${shareUrl}`);
         }
     });
 }

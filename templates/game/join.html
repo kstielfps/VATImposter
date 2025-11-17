@@ -24,6 +24,15 @@
 </div>
 
 <script>
+// Pre-fill code from URL parameter if present
+const urlParams = new URLSearchParams(window.location.search);
+const codeParam = urlParams.get('code');
+if (codeParam) {
+    document.getElementById('code').value = codeParam.toUpperCase();
+    // Auto-focus on the name field if code is pre-filled
+    document.getElementById('player_name').focus();
+}
+
 document.getElementById('code').addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 });
