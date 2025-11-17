@@ -202,11 +202,18 @@
 <div class="card">
     <div class="room-header">
         <h1>Sala: {{ game.code }}{% if is_spectator %}<span class="spectator-badge">👁️ ESPECTADOR</span>{% endif %}</h1>
-        {% if not is_spectator %}
-        <button id="share-link-btn" class="share-link-btn" title="Copiar link para compartilhar">
-            🔗 Compartilhar Link
-        </button>
-        {% endif %}
+        <div style="display: flex; gap: 12px; align-items: center;">
+            {% if player %}
+            <button id="streamer-toggle" class="streamer-toggle" title="Modo Streamer - Oculta palavra e função">
+                📺 Modo Streamer
+            </button>
+            {% endif %}
+            {% if not is_spectator %}
+            <button id="share-link-btn" class="share-link-btn" title="Copiar link para compartilhar">
+                🔗 Compartilhar Link
+            </button>
+            {% endif %}
+        </div>
     </div>
 
     {% if not player and not is_spectator %}
@@ -214,12 +221,6 @@
         Você não está nesta sala. Por favor, entre com seu nome.
     </div>
     {% else %}
-
-    {% if player %}
-    <button id="streamer-toggle" class="streamer-toggle" title="Modo Streamer - Oculta palavra e função">
-        📺 Modo Streamer
-    </button>
-    {% endif %}
 
     <div class="room-container">
         <div class="room-panel">
