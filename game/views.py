@@ -563,19 +563,17 @@ def _process_voting(game):
                 eliminated_player.is_eliminated = True
                 eliminated_player.save()
                 eliminated_player_id = eliminated_player.id
-
-    if eliminated_player and eliminated_player.role == 'clown':
-        known_ids = eliminated_player.palhaco_known_impostors or []
-        total_required = game.actual_num_impostors or game.num_impostors
-        if (
-            eliminated_player.palhaco_goal_state == 'eliminate'
-            and len(set(known_ids)) >= total_required
-        ):
-            game.status = 'finished'
-            game.finished_at = timezone.now()
-            game.winning_team = 'clown'
-            game.save()
-            return eliminated_player_id, vote_count
+                
+                # Verificar vitória do Palhaço: ele deve ser eliminado APÓS ter descoberto todos os impostores
+                if eliminated_player.role == 'clown' and eliminated_player.palhaco_goal_state == 'eliminate':
+                    known_ids = eliminated_player.palhaco_known_impostors or []
+                    total_required = game.actual_num_impostors or game.num_impostors
+                    if len(set(known_ids)) >= total_required:
+                        game.status = 'finished'
+                        game.finished_at = timezone.now()
+                        game.winning_team = 'clown'
+                        game.save()
+                        return eliminated_player_id, vote_count
 
     game.refresh_from_db()
     winner = game.check_win_conditions()
