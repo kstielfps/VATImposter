@@ -382,6 +382,8 @@ def _serialize_game_state(game, is_spectator, player_name=None):
     for player in players_list:
         word_text = None
         role_value = None
+        is_clown_revealed = False  # Para mostrar ao impostor quem é o Palhaço
+        
         if not is_spectator:
             reveal_role = (
                 viewer_player and player.id == viewer_player.id
@@ -392,6 +394,11 @@ def _serialize_game_state(game, is_spectator, player_name=None):
                 role_value = 'citizen'
             else:
                 role_value = actual_role
+            
+            # Revelar Palhaço ao impostor se o poder de caos foi usado
+            if (viewer_player and viewer_player.role == 'impostor' and 
+                viewer_player.impostor_knows_clown and player.role == 'clown'):
+                is_clown_revealed = True
 
             if player.word:
                 if viewer_player and player.id == viewer_player.id:
@@ -408,6 +415,7 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             'word': word_text,
             'nudge_meter': player.nudge_meter,
             'nudge_meter_round': player.nudge_meter_round,
+            'is_clown_revealed': is_clown_revealed,
         })
 
     hints_data = [
@@ -518,6 +526,14 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             len(known_ids) < total_impostors and
             not already_guessed_this_round
         )
+        
+        can_use_chaos_power = (
+            viewer_player.palhaco_goal_state == 'eliminate' and
+            not viewer_player.palhaco_used_chaos_power and
+            not viewer_player.is_eliminated and
+            game.status in ['hints', 'voting']
+        )
+        
         palhaco_payload = {
             'goal_state': viewer_player.palhaco_goal_state or 'finding',
             'known_impostors': [p.name for p in known_players],
@@ -528,6 +544,8 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             'already_guessed_this_round': already_guessed_this_round,
             'goal_ready_round': viewer_player.palhaco_goal_ready_round,
             'needs_elimination': viewer_player.palhaco_goal_state == 'eliminate',
+            'can_use_chaos_power': can_use_chaos_power,
+            'chaos_power_used': viewer_player.palhaco_used_chaos_power,
         }
 
     return {
@@ -829,6 +847,89 @@ def submit_palhaco_guess_api(request, code):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def use_chaos_power_api(request, code):
+    """Palhaço usa o poder de embaralhar palavras (só pode usar quando encontrou todos os impostores)"""
+    game = get_object_or_404(Game, code=code)
+    if game.status not in ['hints', 'voting']:
+        return _json_error('O poder só pode ser usado durante o jogo.', status=400)
+
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return _json_error('Dados inválidos')
+
+    player = _validate_player_action(request, game, payload.get('player_name'))
+    if not player:
+        return _json_error('Não autorizado', status=403)
+    if player.role != 'clown':
+        return _json_error('Apenas o Palhaço pode usar este poder', status=403)
+    if player.is_eliminated:
+        return _json_error('Palhaço eliminado não pode usar poderes', status=400)
+    if player.palhaco_goal_state != 'eliminate':
+        return _json_error('Você precisa encontrar todos os impostores primeiro', status=400)
+    if player.palhaco_used_chaos_power:
+        return _json_error('Você já usou este poder', status=400)
+
+    with transaction.atomic():
+        locked_game = Game.objects.select_for_update().get(id=game.id)
+        
+        # Obter todos os grupos de palavras disponíveis
+        all_groups = list(WordGroup.objects.filter(words__isnull=False).distinct())
+        if len(all_groups) < 2:
+            return _json_error('Não há grupos de palavras suficientes para embaralhar', status=400)
+        
+        # Escolher novo grupo para cidadãos/impostores (diferente do atual)
+        available_groups = [g for g in all_groups if g.id != locked_game.word_group_id]
+        new_citizen_group = random.choice(available_groups if available_groups else all_groups)
+        
+        citizen_words = list(new_citizen_group.words.all())
+        if len(citizen_words) < 2:
+            return _json_error('Grupo escolhido não tem palavras suficientes', status=400)
+        
+        # Escolher novas palavras para cidadão e impostor
+        new_citizen_word = random.choice(citizen_words)
+        remaining = [w for w in citizen_words if w != new_citizen_word]
+        new_impostor_word = random.choice(remaining) if remaining else new_citizen_word
+        
+        # Escolher novo grupo para WhiteMan (diferente dos grupos de cidadão/impostor)
+        whiteman_groups = [g for g in all_groups if g.id != new_citizen_group.id]
+        new_whiteman_group = random.choice(whiteman_groups if whiteman_groups else all_groups)
+        
+        # Atualizar o jogo
+        locked_game.word_group = new_citizen_group
+        locked_game.citizen_word = new_citizen_word
+        locked_game.impostor_word = new_impostor_word
+        locked_game.whiteman_word_group = new_whiteman_group
+        locked_game.save()
+        
+        # Atualizar palavras de todos os jogadores ativos
+        active_players = locked_game.players.filter(is_eliminated=False)
+        for p in active_players:
+            if p.role == 'citizen':
+                p.word = new_citizen_word
+                p.save(update_fields=['word'])
+            elif p.role == 'impostor':
+                p.word = new_impostor_word
+                p.impostor_knows_clown = True  # Revelar Palhaço ao impostor
+                p.save(update_fields=['word', 'impostor_knows_clown'])
+            elif p.role == 'whiteman':
+                whiteman_words = list(new_whiteman_group.words.all())
+                if whiteman_words:
+                    p.word = random.choice(whiteman_words)
+                    p.save(update_fields=['word'])
+            elif p.role == 'clown':
+                p.word = new_impostor_word
+                p.palhaco_used_chaos_power = True
+                p.save(update_fields=['word', 'palhaco_used_chaos_power'])
+        
+    return JsonResponse({
+        'success': True,
+        'message': '🎭 CAOS! Todas as palavras foram embaralhadas! Os impostores agora sabem quem você é.',
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def restart_game_api(request, code):
     game = get_object_or_404(Game, code=code)
     try:
@@ -853,6 +954,8 @@ def restart_game_api(request, code):
             participant.palhaco_known_impostors = []
             participant.palhaco_goal_state = ''
             participant.palhaco_goal_ready_round = 0
+            participant.palhaco_used_chaos_power = False
+            participant.impostor_knows_clown = False
             participant.save()
         Hint.objects.filter(game=locked_game).delete()
         Vote.objects.filter(game=locked_game).delete()

@@ -602,6 +602,58 @@ function updatePalhacoPanel(state, players) {
         knownListEl.innerHTML = '<li>Você ainda não confirmou ninguém.</li>';
     }
 
+    // Botão de Poder de Caos
+    const chaosPowerSection = document.getElementById('palhaco-chaos-power-section');
+    if (!chaosPowerSection) {
+        // Criar seção de poder se não existir
+        const newSection = document.createElement('div');
+        newSection.id = 'palhaco-chaos-power-section';
+        newSection.style.marginTop = '15px';
+        newSection.innerHTML = `
+            <button id="chaos-power-btn" class="btn btn-danger btn-sm">
+                🎲 Embaralhar Palavras
+            </button>
+            <p id="chaos-power-feedback" style="margin-top: 8px; font-size: 0.9em; font-style: italic;"></p>
+        `;
+        panel.appendChild(newSection);
+    }
+    
+    const chaosPowerBtn = document.getElementById('chaos-power-btn');
+    const chaosFeedback = document.getElementById('chaos-power-feedback');
+    
+    if (palhacoData.can_use_chaos_power) {
+        chaosPowerSection.style.display = 'block';
+        chaosPowerBtn.disabled = false;
+        chaosPowerBtn.onclick = async () => {
+            if (!confirm('⚠️ ATENÇÃO: Usar este poder irá embaralhar as palavras de TODOS os jogadores e revelar sua identidade aos IMPOSTORES! Tem certeza?')) {
+                return;
+            }
+            chaosPowerBtn.disabled = true;
+            chaosFeedback.textContent = 'Ativando poder...';
+            try {
+                const response = await postAction('chaos-power', {
+                    player_name: playerName,
+                });
+                if (response && response.message) {
+                    chaosFeedback.textContent = response.message;
+                    // Forçar atualização imediata
+                    setTimeout(() => fetchGameState(true), 500);
+                }
+            } catch (error) {
+                chaosFeedback.textContent = error.message || 'Erro ao usar poder.';
+                chaosPowerBtn.disabled = false;
+            }
+        };
+        chaosFeedback.textContent = '⚡ Poder disponível! Use com cautela.';
+    } else if (palhacoData.chaos_power_used) {
+        chaosPowerSection.style.display = 'block';
+        chaosPowerBtn.disabled = true;
+        chaosPowerBtn.textContent = '✓ Poder Usado';
+        chaosFeedback.textContent = 'Você já usou seu poder de caos neste jogo.';
+    } else {
+        chaosPowerSection.style.display = 'none';
+    }
+
     if (palhacoData.can_guess) {
         const aliveTargets = players.filter(p => !p.is_eliminated && p.name !== playerName);
         if (aliveTargets.length === 0) {
@@ -739,6 +791,10 @@ function updateGameState(state) {
         const eliminationIcon = p.is_eliminated ? ' <span class="danger-text">❌</span>' : '';
         const whitemanBadge = p.role === 'whiteman' && p.is_eliminated ? ' <span class="whiteman-badge">⚪ WhiteMan</span>' : '';
         const clownBadge = p.role === 'clown' && p.is_eliminated ? ' <span class="clown-badge">🎭 Palhaço</span>' : '';
+        
+        // Indicador de Palhaço para o impostor (quando o poder de caos foi usado)
+        const clownRevealedBadge = p.is_clown_revealed ? ' <span class="clown-badge">🎭 PALHAÇO!</span>' : '';
+        
         const isCurrentTurn = currentTurnPlayer && p.name === currentTurnPlayer && !p.is_eliminated;
         const interactiveAttrs = isCurrentTurn 
             ? `role="button" tabindex="0" aria-label="Alertar turno de ${p.name}" title="Tocar alerta para ${p.name}"`
@@ -763,7 +819,7 @@ function updateGameState(state) {
         
         return `<li class="${classes}" data-player-id="${p.id}" data-player-name="${p.name}" ${interactiveAttrs}>
             <div class="player-main-row">
-                <span>${p.name}${eliminationIcon}${whitemanBadge}${clownBadge}</span>
+                <span>${p.name}${eliminationIcon}${whitemanBadge}${clownBadge}${clownRevealedBadge}</span>
                 ${kickButton}
             </div>
             ${meterFill}

@@ -280,6 +280,8 @@ class Player(models.Model):
         default='',
     )
     palhaco_goal_ready_round = models.IntegerField(default=0)
+    palhaco_used_chaos_power = models.BooleanField(default=False)
+    impostor_knows_clown = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.game.code})"
