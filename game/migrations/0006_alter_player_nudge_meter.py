@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('game', '0006_merge_20251117_2336'),
+        ('game', '0005_nudge_meter_hp_defaults'),
     ]
 
     operations = [

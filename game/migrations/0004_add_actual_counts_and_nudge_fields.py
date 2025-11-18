@@ -6,7 +6,6 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('game', '0002_game_whiteman_word_group_alter_game_word_group'),
         ('game', '0003_nudge'),
     ]
 

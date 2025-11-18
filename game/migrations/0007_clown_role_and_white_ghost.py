@@ -14,7 +14,7 @@ def revert_max_players(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('game', '0007_alter_player_nudge_meter'),
+        ('game', '0006_alter_player_nudge_meter'),
     ]
 
     operations = [
