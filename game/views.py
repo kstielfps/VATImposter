@@ -502,11 +502,21 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         known_ids = viewer_player.palhaco_known_impostors or []
         known_players = list(Player.objects.filter(id__in=known_ids)) if known_ids else []
         total_impostors = game.actual_num_impostors or game.num_impostors
+        
+        # Verificar se já fez palpite nesta rodada
+        already_guessed_this_round = Vote.objects.filter(
+            game=game,
+            voter=viewer_player,
+            round_number=game.current_round,
+            is_palhaco_guess=True
+        ).exists()
+        
         can_guess = (
             game.status == 'voting' and
             not viewer_player.is_eliminated and
             viewer_player.palhaco_goal_state in ['', 'finding', 'pending'] and
-            len(known_ids) < total_impostors
+            len(known_ids) < total_impostors and
+            not already_guessed_this_round
         )
         palhaco_payload = {
             'goal_state': viewer_player.palhaco_goal_state or 'finding',
@@ -515,6 +525,7 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             'total_impostors': total_impostors,
             'remaining_impostors': max(0, total_impostors - len(known_ids)),
             'can_guess': can_guess,
+            'already_guessed_this_round': already_guessed_this_round,
             'goal_ready_round': viewer_player.palhaco_goal_ready_round,
             'needs_elimination': viewer_player.palhaco_goal_state == 'eliminate',
         }

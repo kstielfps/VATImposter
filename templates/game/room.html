@@ -630,13 +630,14 @@ function updatePalhacoPanel(state, players) {
                     }
                 } catch (error) {
                     feedbackEl.textContent = error.message || 'Erro ao enviar palpite.';
-                } finally {
-                    guessBtn.disabled = false;
                 }
             };
         }
     } else {
         guessSection.style.display = 'none';
+        if (palhacoData.already_guessed_this_round) {
+            feedbackEl.textContent = 'Você já fez seu palpite nesta rodada. Aguarde a próxima votação.';
+        }
     }
 }
 
