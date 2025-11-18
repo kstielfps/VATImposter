@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/game/<str:code>/start/', views.start_game_api, name='start_game_api'),
     path('api/game/<str:code>/hint/', views.submit_hint_api, name='submit_hint_api'),
     path('api/game/<str:code>/vote/', views.submit_vote_api, name='submit_vote_api'),
+    path('api/game/<str:code>/palhaco-guess/', views.submit_palhaco_guess_api, name='submit_palhaco_guess_api'),
     path('api/game/<str:code>/restart/', views.restart_game_api, name='restart_game_api'),
     path('api/game/<str:code>/close/', views.close_room_api, name='close_room_api'),
     path('api/game/<str:code>/kick/', views.kick_player_api, name='kick_player_api'),

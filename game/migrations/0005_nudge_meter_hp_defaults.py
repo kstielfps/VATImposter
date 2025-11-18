@@ -14,7 +14,7 @@ def revert_initial_hp(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('game', '0003_add_actual_counts_and_nudge_fields'),
+        ('game', '0003_z_add_actual_counts_and_nudge_fields'),
     ]
 
     operations = [

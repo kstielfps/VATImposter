@@ -35,6 +35,7 @@ def create_game(request):
                 return JsonResponse({'error': error}, status=400)
             num_impostors = int(data.get('num_impostors', 1))
             num_whitemen = int(data.get('num_whitemen', 0))
+            num_clowns = int(data.get('num_palhacos', 0))
             
             # Validações
             if num_impostors < 1 or num_impostors > 2:
@@ -42,12 +43,15 @@ def create_game(request):
             
             if num_whitemen < 0 or num_whitemen > 3:
                 return JsonResponse({'error': 'Número de whitemen deve ser entre 0 e 3'}, status=400)
+            if num_clowns < 0 or num_clowns > 1:
+                return JsonResponse({'error': 'Número de palhaços deve ser 0 ou 1'}, status=400)
             
             # Criar jogo
             game = Game.objects.create(
                 creator=creator_name,
                 num_impostors=num_impostors,
                 num_whitemen=num_whitemen,
+                num_clowns=num_clowns,
                 status='waiting'
             )
             
@@ -368,6 +372,10 @@ def _record_hint_and_progress(game, player, hint_word):
 
 
 def _serialize_game_state(game, is_spectator, player_name=None):
+    viewer_player = None
+    if player_name and not is_spectator:
+        viewer_player = Player.objects.filter(game=game, name=player_name).first()
+
     players_qs = game.players.select_related('word').all()
     players_list = sort_players_for_display(game.code, players_qs)
     players_data = []
@@ -375,18 +383,28 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         word_text = None
         role_value = None
         if not is_spectator:
-            if player.role == 'whiteman' and not player.is_eliminated:
+            reveal_role = (
+                viewer_player and player.id == viewer_player.id
+            ) or player.is_eliminated or game.status == 'finished'
+
+            actual_role = player.role
+            if actual_role in ['whiteman', 'clown'] and not reveal_role:
                 role_value = 'citizen'
             else:
-                role_value = player.role
+                role_value = actual_role
+
             if player.word:
-                word_text = player.word.text
+                if viewer_player and player.id == viewer_player.id:
+                    word_text = player.word.text
+                elif reveal_role and actual_role != 'impostor':
+                    word_text = player.word.text
         players_data.append({
             'id': player.id,
             'name': player.name,
             'is_eliminated': player.is_eliminated,
             'is_creator': player.is_creator,
             'role': role_value,
+            'actual_role': player.role if (viewer_player and player.id == viewer_player.id) or player.is_eliminated or game.status == 'finished' else None,
             'word': word_text,
             'nudge_meter': player.nudge_meter,
             'nudge_meter_round': player.nudge_meter_round,
@@ -404,7 +422,7 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         .order_by('round_number', 'created_at')
     ]
 
-    current_round_votes = Vote.objects.filter(game=game, round_number=game.current_round)
+    current_round_votes = Vote.objects.filter(game=game, round_number=game.current_round, is_palhaco_guess=False)
     votes_data = [
         {
             'voter_name': vote.voter.name,
@@ -415,7 +433,8 @@ def _serialize_game_state(game, is_spectator, player_name=None):
 
     vote_history = {}
     vote_tallies = {}
-    for vote in Vote.objects.filter(game=game).select_related('voter', 'target').order_by('round_number', 'created_at'):
+    elimination_votes = Vote.objects.filter(game=game, is_palhaco_guess=False).select_related('voter', 'target').order_by('round_number', 'created_at')
+    for vote in elimination_votes:
         vote_history.setdefault(vote.round_number, []).append({
             'voter_name': vote.voter.name,
             'target_name': vote.target.name,
@@ -462,9 +481,12 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         'current_player': current_player_name,
         'num_impostors': game.num_impostors,
         'num_whitemen': game.num_whitemen,
+        'num_clowns': game.num_clowns,
+        'max_players': game.max_players,
         'citizen_word': None,
         'impostor_word': None,
         'nudge_meter_max': 100,
+        'winning_team': game.winning_team,
     }
 
     if not is_spectator:
@@ -473,6 +495,29 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         if game.status == 'finished':
             game_data['actual_num_impostors'] = game.actual_num_impostors
             game_data['actual_num_whitemen'] = game.actual_num_whitemen
+            game_data['actual_num_clowns'] = game.actual_num_clowns
+
+    palhaco_payload = None
+    if viewer_player and viewer_player.role == 'clown':
+        known_ids = viewer_player.palhaco_known_impostors or []
+        known_players = list(Player.objects.filter(id__in=known_ids)) if known_ids else []
+        total_impostors = game.actual_num_impostors or game.num_impostors
+        can_guess = (
+            game.status == 'voting' and
+            not viewer_player.is_eliminated and
+            viewer_player.palhaco_goal_state in ['', 'finding', 'pending'] and
+            len(known_ids) < total_impostors
+        )
+        palhaco_payload = {
+            'goal_state': viewer_player.palhaco_goal_state or 'finding',
+            'known_impostors': [p.name for p in known_players],
+            'known_count': len(known_players),
+            'total_impostors': total_impostors,
+            'remaining_impostors': max(0, total_impostors - len(known_ids)),
+            'can_guess': can_guess,
+            'goal_ready_round': viewer_player.palhaco_goal_ready_round,
+            'needs_elimination': viewer_player.palhaco_goal_state == 'eliminate',
+        }
 
     return {
         'game': game_data,
@@ -482,13 +527,14 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         'vote_history': vote_history,
         'vote_tallies': vote_tallies,
         'nudges': nudges_data,
+        'palhaco': palhaco_payload,
     }
 
 
 def _process_voting(game):
     vote_count = {}
     votes = list(
-        Vote.objects.filter(game=game, round_number=game.current_round)
+        Vote.objects.filter(game=game, round_number=game.current_round, is_palhaco_guess=False)
         .select_related('target')
     )
     for vote in votes:
@@ -496,6 +542,7 @@ def _process_voting(game):
         vote_count[target_id] = vote_count.get(target_id, 0) + 1
 
     eliminated_player_id = None
+    eliminated_player = None
     if vote_count:
         max_votes = max(vote_count.values())
         most_voted_ids = [pid for pid, count in vote_count.items() if count == max_votes]
@@ -505,6 +552,19 @@ def _process_voting(game):
                 eliminated_player.is_eliminated = True
                 eliminated_player.save()
                 eliminated_player_id = eliminated_player.id
+
+    if eliminated_player and eliminated_player.role == 'clown':
+        known_ids = eliminated_player.palhaco_known_impostors or []
+        total_required = game.actual_num_impostors or game.num_impostors
+        if (
+            eliminated_player.palhaco_goal_state == 'eliminate'
+            and len(set(known_ids)) >= total_required
+        ):
+            game.status = 'finished'
+            game.finished_at = timezone.now()
+            game.winning_team = 'clown'
+            game.save()
+            return eliminated_player_id, vote_count
 
     game.refresh_from_db()
     winner = game.check_win_conditions()
@@ -571,8 +631,9 @@ def start_game_api(request, code):
         return _json_error('Não autorizado', status=403)
     if not player.is_creator:
         return _json_error('Apenas o criador pode iniciar o jogo', status=403)
-    if not game.can_start():
-        return _json_error('Número mínimo de jogadores não atingido')
+    can_start, reason = game.validate_can_start()
+    if not can_start:
+        return _json_error(reason or 'Número mínimo de jogadores não atingido')
     if not game.assign_words():
         return _json_error('Não há grupos de palavras suficientes para iniciar o jogo')
 
@@ -631,7 +692,8 @@ def submit_vote_api(request, code):
     player = _validate_player_action(request, game, payload.get('player_name'))
     if not player:
         return _json_error('Não autorizado', status=403)
-    if player.is_eliminated:
+    ghost_whiteman = player.role == 'whiteman' and player.is_eliminated
+    if player.is_eliminated and not ghost_whiteman:
         return _json_error('Jogador eliminado não vota')
 
     target_name = payload.get('target_name')
@@ -643,16 +705,21 @@ def submit_vote_api(request, code):
     except Player.DoesNotExist:
         return _json_error('Jogador alvo não encontrado')
 
-    if Vote.objects.filter(game=game, voter=player, round_number=game.current_round).exists():
+    if Vote.objects.filter(game=game, voter=player, round_number=game.current_round, is_palhaco_guess=False).exists():
         return _json_error('Você já votou nesta rodada')
 
-    Vote.objects.create(game=game, voter=player, target=target, round_number=game.current_round)
+    Vote.objects.create(game=game, voter=player, target=target, round_number=game.current_round, is_palhaco_guess=False)
 
     active_players = list(game.get_active_players())
-    votes_count = Vote.objects.filter(game=game, round_number=game.current_round).count()
+    votes_count = Vote.objects.filter(
+        game=game,
+        round_number=game.current_round,
+        is_palhaco_guess=False,
+        voter__is_eliminated=False,
+    ).count()
     
     vote_result = None
-    if votes_count >= len(active_players):
+    if len(active_players) > 0 and votes_count >= len(active_players):
         eliminated_id, vote_count = _process_voting(game)
         vote_result = {
             'eliminated_player_id': eliminated_id,
@@ -663,6 +730,92 @@ def submit_vote_api(request, code):
         }
 
     return JsonResponse({'success': True, 'vote_result': vote_result})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def submit_palhaco_guess_api(request, code):
+    game = get_object_or_404(Game, code=code)
+    if game.status != 'voting':
+        return _json_error('Os palpites do Palhaço só podem acontecer durante a votação.', status=400)
+
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return _json_error('Dados inválidos')
+
+    player = _validate_player_action(request, game, payload.get('player_name'))
+    if not player:
+        return _json_error('Não autorizado', status=403)
+    if player.role != 'clown':
+        return _json_error('Apenas o Palhaço pode usar esta ação', status=403)
+    if player.is_eliminated:
+        return _json_error('Palhaço eliminado não pode fazer palpites', status=400)
+    if player.palhaco_goal_state == 'eliminate':
+        return _json_error('Você já descobriu todos os impostores. Agora convença a sala a votar em você!', status=400)
+
+    target_name = payload.get('target_name')
+    if not target_name:
+        return _json_error('Jogador alvo é obrigatório')
+
+    try:
+        target = Player.objects.get(game=game, name=target_name)
+    except Player.DoesNotExist:
+        return _json_error('Jogador alvo não encontrado')
+
+    if target.name == player.name:
+        return _json_error('Você não pode se acusar')
+
+    if Vote.objects.filter(
+        game=game,
+        voter=player,
+        target=target,
+        round_number=game.current_round,
+        is_palhaco_guess=True,
+    ).exists():
+        return _json_error('Você já testou esse jogador nesta rodada')
+
+    Vote.objects.create(
+        game=game,
+        voter=player,
+        target=target,
+        round_number=game.current_round,
+        is_palhaco_guess=True,
+    )
+
+    known_ids = set(player.palhaco_known_impostors or [])
+    total_impostors = game.actual_num_impostors or game.num_impostors
+    correct = target.role == 'impostor'
+    message = ''
+    update_fields = []
+
+    if correct and target.id not in known_ids:
+        known_ids.add(target.id)
+        player.palhaco_known_impostors = list(known_ids)
+        update_fields.append('palhaco_known_impostors')
+        if len(known_ids) >= total_impostors:
+            player.palhaco_goal_state = 'eliminate'
+            player.palhaco_goal_ready_round = game.current_round
+            update_fields.extend(['palhaco_goal_state', 'palhaco_goal_ready_round'])
+            message = '🎭 Você descobriu todos os impostores! Agora precisa ser eliminado para vencer sozinho.'
+        else:
+            remaining = total_impostors - len(known_ids)
+            message = f'✅ {target.name} é impostor! Falta descobrir {remaining}.'
+    elif correct:
+        message = f'Você já sabia que {target.name} é impostor.'
+    else:
+        message = f'❌ {target.name} não é impostor.'
+
+    if update_fields:
+        player.save(update_fields=update_fields)
+
+    remaining_impostors = max(0, total_impostors - len(known_ids))
+    return JsonResponse({
+        'success': True,
+        'correct': correct,
+        'message': message,
+        'remaining_impostors': remaining_impostors,
+    })
 
 
 @csrf_exempt
@@ -688,6 +841,9 @@ def restart_game_api(request, code):
             participant.word_id = None
             participant.nudge_meter = 100
             participant.nudge_meter_round = 0
+            participant.palhaco_known_impostors = []
+            participant.palhaco_goal_state = ''
+            participant.palhaco_goal_ready_round = 0
             participant.save()
         Hint.objects.filter(game=locked_game).delete()
         Vote.objects.filter(game=locked_game).delete()
@@ -703,6 +859,8 @@ def restart_game_api(request, code):
         locked_game.finished_at = None
         locked_game.actual_num_impostors = 0
         locked_game.actual_num_whitemen = 0
+        locked_game.actual_num_clowns = 0
+        locked_game.winning_team = None
         locked_game.save()
 
     _reset_nudges_for_round(game, 0)

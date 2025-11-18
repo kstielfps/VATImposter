@@ -47,10 +47,13 @@ class Game(models.Model):
     # Configurações
     num_impostors = models.IntegerField(default=1)  # Seleção do criador (máx configurável)
     num_whitemen = models.IntegerField(default=0)  # Seleção do criador (0-3)
+    num_clowns = models.IntegerField(default=0)  # Palhaço (0-1)
     actual_num_impostors = models.IntegerField(default=0)  # Quantidade sorteada para a partida
     actual_num_whitemen = models.IntegerField(default=0)
-    max_players = models.IntegerField(default=8)
+    actual_num_clowns = models.IntegerField(default=0)
+    max_players = models.IntegerField(default=12)
     min_players = models.IntegerField(default=4)
+    winning_team = models.CharField(max_length=20, blank=True, null=True)
     
     # Palavras do jogo
     word_group = models.ForeignKey(WordGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='citizen_impostor_games')
@@ -93,14 +96,29 @@ class Game(models.Model):
         remaining_slots = len(players) - effective_impostors
         max_whitemen_allowed = max(0, min(self.num_whitemen, 3, remaining_slots))
         effective_whitemen = random.randint(0, max_whitemen_allowed) if max_whitemen_allowed > 0 else 0
+        remaining_slots -= effective_whitemen
+
+        effective_clowns = 0
+        if self.num_clowns > 0 and len(players) >= 6 and remaining_slots > 0:
+            effective_clowns = min(1, self.num_clowns, remaining_slots)
+            remaining_slots -= effective_clowns
+
         self.actual_num_whitemen = effective_whitemen
-        self.save(update_fields=['actual_num_impostors', 'actual_num_whitemen'])
+        self.actual_num_clowns = effective_clowns
+        self.winning_team = None
+        self.save(update_fields=['actual_num_impostors', 'actual_num_whitemen', 'actual_num_clowns', 'winning_team'])
+
+        def reset_clown_meta(p):
+            p.palhaco_known_impostors = []
+            p.palhaco_goal_state = ''
+            p.palhaco_goal_ready_round = 0
 
         # Atribuir impostores
         impostors = players[:effective_impostors]
         for player in impostors:
             player.role = 'impostor'
             player.word = self.impostor_word
+            reset_clown_meta(player)
             player.save()
         
         # Atribuir whitemen
@@ -108,18 +126,33 @@ class Game(models.Model):
         whitemen = remaining[:effective_whitemen]
         for player in whitemen:
             player.role = 'whiteman'
-            # WhiteMan recebe palavra aleatória de um grupo DIFERENTE
             if self.whiteman_word_group:
                 whiteman_words = list(self.whiteman_word_group.words.all())
                 if whiteman_words:
                     player.word = random.choice(whiteman_words)
+            reset_clown_meta(player)
             player.save()
         
+        remaining = remaining[effective_whitemen:]
+
+        # Palhaço
+        clowns = remaining[:effective_clowns]
+        for player in clowns:
+            player.role = 'clown'
+            player.word = self.impostor_word
+            player.palhaco_known_impostors = []
+            player.palhaco_goal_state = 'finding'
+            player.palhaco_goal_ready_round = 0
+            player.save()
+
+        remaining = remaining[effective_clowns:]
+
         # Resto são cidadãos
-        citizens = remaining[effective_whitemen:]
+        citizens = remaining
         for player in citizens:
             player.role = 'citizen'
             player.word = self.citizen_word
+            reset_clown_meta(player)
             player.save()
 
     def assign_words(self):
@@ -154,16 +187,24 @@ class Game(models.Model):
         
         return True
 
-    def can_start(self):
-        """Verifica se o jogo pode ser iniciado"""
-        # Contar todos os jogadores (não eliminados) quando o jogo está em waiting
-        # Após reinício, todos os jogadores devem estar ativos
+    def validate_can_start(self):
+        """Retorna (bool, mensagem) indicando se o jogo pode ser iniciado."""
         if self.status == 'waiting':
             total_players = self.players.count()
-            return total_players >= self.min_players and total_players <= self.max_players
         else:
-            active_players = self.players.filter(is_eliminated=False).count()
-            return active_players >= self.min_players and active_players <= self.max_players
+            total_players = self.players.filter(is_eliminated=False).count()
+
+        if total_players < self.min_players:
+            return False, f'São necessários pelo menos {self.min_players} jogadores para começar.'
+        if total_players > self.max_players:
+            return False, f'Limite máximo de {self.max_players} jogadores atingido.'
+        if self.num_clowns > 0 and total_players < 6:
+            return False, 'Palhaço só pode jogar com 6 ou mais jogadores.'
+        return True, ''
+
+    def can_start(self):
+        valid, _ = self.validate_can_start()
+        return valid
 
     def get_active_players(self):
         """Retorna jogadores ativos (não eliminados)"""
@@ -188,15 +229,14 @@ class Game(models.Model):
         impostors = [p for p in active_players if p.role == 'impostor']
         non_impostors = [p for p in active_players if p.role != 'impostor']
         
-        # Se não há mais impostores, cidadãos ganham
         if len(impostors) == 0:
+            self.winning_team = 'citizens'
             return 'citizens'
         
         # Se sobram apenas 2 jogadores
         if len(active_players) == 2:
-            if len(impostors) == 2:
-                return 'impostors'
-            elif len(impostors) == 1:
+            if len(impostors) >= 1:
+                self.winning_team = 'impostors'
                 return 'impostors'
         
         return None
@@ -215,6 +255,7 @@ class Player(models.Model):
         ('citizen', 'Cidadão'),
         ('impostor', 'Impostor'),
         ('whiteman', 'WhiteMan'),
+        ('clown', 'Palhaço'),
     ]
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='players')
@@ -226,6 +267,19 @@ class Player(models.Model):
     joined_at = models.DateTimeField(auto_now_add=True)
     nudge_meter = models.IntegerField(default=100)
     nudge_meter_round = models.IntegerField(default=0)
+    palhaco_known_impostors = models.JSONField(default=list, blank=True)
+    palhaco_goal_state = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=[
+            ('', 'Sem Objetivo'),
+            ('finding', 'Encontrando Impostor'),
+            ('pending', 'Aguardando Atualização'),
+            ('eliminate', 'Precisa ser Eliminado'),
+        ],
+        default='',
+    )
+    palhaco_goal_ready_round = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.name} ({self.game.code})"
@@ -259,15 +313,17 @@ class Vote(models.Model):
     voter = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='votes_cast')
     target = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='votes_received')
     round_number = models.IntegerField()
+    is_palhaco_guess = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.voter.name} votou em {self.target.name} (Rodada {self.round_number})"
+        label = 'Palpite' if self.is_palhaco_guess else 'Voto'
+        return f"{label} - {self.voter.name} → {self.target.name} (Rodada {self.round_number})"
 
     class Meta:
         verbose_name = "Voto"
         verbose_name_plural = "Votos"
-        unique_together = [['game', 'voter', 'round_number']]
+        unique_together = [['game', 'voter', 'round_number', 'is_palhaco_guess']]
 
 
 class Nudge(models.Model):
