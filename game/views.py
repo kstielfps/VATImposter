@@ -208,6 +208,14 @@ def create_admin_user(request):
     Use: /create-admin/?token=YOUR_TOKEN&username=admin&password=senha123&email=admin@example.com
     Ou acesse /create-admin/ para ver o formulário (se DEBUG=True)
     """
+    # DESABILITAR se já existe superuser (segurança)
+    if User.objects.filter(is_superuser=True).exists():
+        return JsonResponse({
+            'error': 'Já existe um superusuário criado',
+            'message': 'Por segurança, esta rota está desabilitada',
+            'admin_url': '/admin/'
+        }, status=403)
+    
     # Se for GET e DEBUG=True, mostrar formulário
     if request.method == 'GET' and settings.DEBUG:
         return render(request, 'game/create_admin.html')
