@@ -45,8 +45,10 @@ class Game(models.Model):
     creator = models.CharField(max_length=100)  # Nome do criador
     
     # Configurações
-    num_impostors = models.IntegerField(default=1)  # 1 ou 2
-    num_whitemen = models.IntegerField(default=0)  # 0, 1 ou 2
+    num_impostors = models.IntegerField(default=1)  # Seleção do criador (máx configurável)
+    num_whitemen = models.IntegerField(default=0)  # Seleção do criador (0-3)
+    actual_num_impostors = models.IntegerField(default=0)  # Quantidade sorteada para a partida
+    actual_num_whitemen = models.IntegerField(default=0)
     max_players = models.IntegerField(default=8)
     min_players = models.IntegerField(default=4)
     
@@ -80,17 +82,30 @@ class Game(models.Model):
     def assign_roles(self):
         """Distribui os papéis (Impostor, WhiteMan, Cidadão)"""
         players = list(self.players.filter(is_eliminated=False).order_by('?'))
-        
+
+        if not players:
+            return
+
+        max_impostors = max(1, min(self.num_impostors, len(players)))
+        effective_impostors = random.randint(1, max_impostors)
+        self.actual_num_impostors = effective_impostors
+
+        remaining_slots = len(players) - effective_impostors
+        max_whitemen_allowed = max(0, min(self.num_whitemen, 3, remaining_slots))
+        effective_whitemen = random.randint(0, max_whitemen_allowed) if max_whitemen_allowed > 0 else 0
+        self.actual_num_whitemen = effective_whitemen
+        self.save(update_fields=['actual_num_impostors', 'actual_num_whitemen'])
+
         # Atribuir impostores
-        impostors = players[:self.num_impostors]
+        impostors = players[:effective_impostors]
         for player in impostors:
             player.role = 'impostor'
             player.word = self.impostor_word
             player.save()
         
         # Atribuir whitemen
-        remaining = players[self.num_impostors:]
-        whitemen = remaining[:self.num_whitemen]
+        remaining = players[effective_impostors:]
+        whitemen = remaining[:effective_whitemen]
         for player in whitemen:
             player.role = 'whiteman'
             # WhiteMan recebe palavra aleatória de um grupo DIFERENTE
@@ -101,7 +116,7 @@ class Game(models.Model):
             player.save()
         
         # Resto são cidadãos
-        citizens = remaining[self.num_whitemen:]
+        citizens = remaining[effective_whitemen:]
         for player in citizens:
             player.role = 'citizen'
             player.word = self.citizen_word
@@ -209,6 +224,8 @@ class Player(models.Model):
     is_eliminated = models.BooleanField(default=False)
     is_creator = models.BooleanField(default=False)
     joined_at = models.DateTimeField(auto_now_add=True)
+    nudge_meter = models.IntegerField(default=100)
+    nudge_meter_round = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.name} ({self.game.code})"
@@ -258,6 +275,7 @@ class Nudge(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='nudges')
     from_player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='nudges_sent')
     to_player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='nudges_received')
+    round_number = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     acknowledged = models.BooleanField(default=False)  # Se o jogador já viu/ouviu o nudge
 

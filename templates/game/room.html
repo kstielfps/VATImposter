@@ -147,12 +147,73 @@
 
     .player-item {
         display: flex;
-        align-items: center;
-        gap: 12px;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(77, 212, 255, 0.08);
+        background: rgba(10, 14, 22, 0.65);
+        transition: border-color 0.15s ease, background 0.15s ease;
     }
 
-    .player-item > span:first-child {
+    .player-main-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .player-main-row > span:first-child {
         flex: 1;
+    }
+
+    .nudge-meter {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8rem;
+        color: var(--text-300);
+    }
+
+    .nudge-meter-track {
+        flex: 1;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(26, 43, 36, 0.8);
+        overflow: hidden;
+    }
+
+    .nudge-meter-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(120deg, rgba(45, 211, 111, 0.95), rgba(129, 255, 151, 0.95));
+        transition: width 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+        box-shadow: 0 0 10px rgba(45, 211, 111, 0.4);
+    }
+
+    .nudge-meter-fill.is-warning {
+        background: linear-gradient(120deg, rgba(244, 180, 0, 0.95), rgba(255, 210, 92, 0.95));
+        box-shadow: 0 0 10px rgba(244, 180, 0, 0.45);
+    }
+
+    .nudge-meter-fill.is-danger {
+        background: linear-gradient(120deg, rgba(255, 77, 109, 0.95), rgba(255, 126, 162, 0.95));
+        box-shadow: 0 0 12px rgba(255, 77, 109, 0.6);
+    }
+
+    .nudge-meter-value {
+        min-width: 52px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: var(--text-200);
+    }
+
+    .nudge-meter-legend {
+        margin-top: 6px;
+        color: var(--text-400);
+        font-size: 0.85rem;
     }
 
     .room-header {
@@ -232,6 +293,7 @@
 
             <div>
                 <h3>Jogadores:</h3>
+                <p class="nudge-meter-legend">💚 HP começa em 100. Cada cutucada reduz — se zerar durante sua vez, você perde o turno.</p>
                 <ul class="players-list" id="players-list">
                     {% for p in players %}
                     <li class="player-item{% if p.is_creator %} creator{% endif %}{% if p.is_eliminated %} eliminated{% endif %}" data-player-id="{{ p.id }}">
@@ -370,8 +432,7 @@ function attachPlayerPingHandlers() {
         const newItem = item.cloneNode(true);
         item.parentNode.replaceChild(newItem, item);
         
-        // Get the player name from the text content (remove extra badges/icons)
-        const playerNameText = newItem.querySelector('span')?.textContent.trim().split(/\s/)[0] || '';
+        const playerNameText = newItem.dataset.playerName || '';
         
         newItem.addEventListener('click', () => handlePlayerPing(newItem, playerNameText));
         newItem.addEventListener('keydown', (event) => {
@@ -482,6 +543,7 @@ function updateGameState(state) {
     document.getElementById('game-status').textContent = getStatusText(game.status);
     document.getElementById('current-round').textContent = game.current_round;
     document.getElementById('player-count').textContent = players.length;
+    const nudgeMeterMax = game.nudge_meter_max || 100;
 
     // Controlar botões de iniciar e reiniciar dinamicamente
     const currentPlayer = players.find(p => p.name === playerName);
@@ -544,15 +606,30 @@ function updateGameState(state) {
         const interactiveAttrs = isCurrentTurn 
             ? `role="button" tabindex="0" aria-label="Alertar turno de ${p.name}" title="Tocar alerta para ${p.name}"`
             : '';
+        const safeMax = nudgeMeterMax > 0 ? nudgeMeterMax : 100;
+        const hpValue = typeof p.nudge_meter === 'number'
+            ? Math.max(0, Math.min(p.nudge_meter, safeMax))
+            : safeMax;
+        const rawPercent = Math.round((hpValue / safeMax) * 100);
+        const meterClass = rawPercent <= 20 ? 'is-danger' : rawPercent <= 50 ? 'is-warning' : '';
+        const meterFill = `<div class="nudge-meter" aria-label="HP de ${p.name}: ${hpValue} de ${safeMax}">
+                <div class="nudge-meter-track">
+                    <div class="nudge-meter-fill ${meterClass}" style="width: ${rawPercent}%;"></div>
+                </div>
+                <span class="nudge-meter-value">${hpValue} HP</span>
+            </div>`;
         
         // Botão de kick apenas para o criador, na sala de espera, e não para si mesmo
         const kickButton = canKick && p.name !== playerName 
             ? `<button class="btn-kick" data-player-name="${p.name}" title="Remover jogador">✕</button>`
             : '';
         
-        return `<li class="${classes}" data-player-id="${p.id}" ${interactiveAttrs}>
-            <span>${p.name}${eliminationIcon}${whitemanBadge}</span>
-            ${kickButton}
+        return `<li class="${classes}" data-player-id="${p.id}" data-player-name="${p.name}" ${interactiveAttrs}>
+            <div class="player-main-row">
+                <span>${p.name}${eliminationIcon}${whitemanBadge}</span>
+                ${kickButton}
+            </div>
+            ${meterFill}
         </li>`;
     }).join('');
     

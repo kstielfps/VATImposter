@@ -13,7 +13,8 @@
         <input type="text" id="code" name="code" required placeholder="Digite o código" style="text-transform: uppercase;">
         
         <label for="player_name">Seu Nome:</label>
-        <input type="text" id="player_name" name="player_name" required placeholder="Digite seu nome">
+        <input type="text" id="player_name" name="player_name" required placeholder="Digite seu nome" maxlength="10">
+        <small>Máximo de 10 caracteres. Espaços não são permitidos.</small>
         
         <button type="submit" class="btn btn-block">Entrar na Sala</button>
     </form>
@@ -33,19 +34,34 @@ if (codeParam) {
     document.getElementById('player_name').focus();
 }
 
-document.getElementById('code').addEventListener('input', (e) => {
+const codeInput = document.getElementById('code');
+const playerNameInput = document.getElementById('player_name');
+const errorDiv = document.getElementById('error-message');
+
+codeInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+
+playerNameInput.addEventListener('input', () => {
+    if (playerNameInput.value.length > 10) {
+        playerNameInput.value = playerNameInput.value.slice(0, 10);
+    }
 });
 
 document.getElementById('join-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    if (/\s/.test(playerNameInput.value)) {
+        errorDiv.textContent = 'Nomes não podem conter espaços.';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
     const formData = {
-        code: document.getElementById('code').value.toUpperCase(),
-        player_name: document.getElementById('player_name').value,
+        code: codeInput.value.toUpperCase(),
+        player_name: playerNameInput.value,
     };
     
-    const errorDiv = document.getElementById('error-message');
     errorDiv.style.display = 'none';
     
     try {

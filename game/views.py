@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import transaction
+from datetime import timedelta
 import json
 import traceback
 import os
@@ -28,19 +29,19 @@ def create_game(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            creator_name = data.get('creator_name', '').strip()
+            raw_creator_name = data.get('creator_name', '')
+            creator_name, error = _normalize_player_name(raw_creator_name, 'Nome do criador')
+            if error:
+                return JsonResponse({'error': error}, status=400)
             num_impostors = int(data.get('num_impostors', 1))
             num_whitemen = int(data.get('num_whitemen', 0))
             
             # Validações
-            if not creator_name:
-                return JsonResponse({'error': 'Nome é obrigatório'}, status=400)
-            
             if num_impostors < 1 or num_impostors > 2:
                 return JsonResponse({'error': 'Número de impostores deve ser entre 1 e 2'}, status=400)
             
-            if num_whitemen < 0 or num_whitemen > 2:
-                return JsonResponse({'error': 'Número de whitemen deve ser entre 0 e 2'}, status=400)
+            if num_whitemen < 0 or num_whitemen > 3:
+                return JsonResponse({'error': 'Número de whitemen deve ser entre 0 e 3'}, status=400)
             
             # Criar jogo
             game = Game.objects.create(
@@ -94,9 +95,15 @@ def join_game(request):
     if request.method == 'POST':
         data = json.loads(request.body)
         code = data.get('code', '').strip().upper()
-        player_name = data.get('player_name', '').strip()
+        raw_name = data.get('player_name', '')
+        player_name, error = _normalize_player_name(raw_name, 'Nome do jogador')
         
-        if not code or not player_name:
+        if not code or error:
+            if not code:
+                return JsonResponse({'error': 'Código é obrigatório'}, status=400)
+            return JsonResponse({'error': error}, status=400)
+        
+        if not player_name:
             return JsonResponse({'error': 'Código e nome são obrigatórios'}, status=400)
         
         try:
@@ -303,6 +310,63 @@ def _validate_player_action(request, game, provided_name):
     return player
 
 
+def _normalize_player_name(raw_name, field_label='Nome'):
+    cleaned = (raw_name or '').strip()
+    if not cleaned:
+        return None, f'{field_label} é obrigatório'
+    if any(ch.isspace() for ch in cleaned):
+        return None, f'{field_label} não pode conter espaços'
+    if len(cleaned) > 10:
+        cleaned = cleaned[:10]
+    return cleaned, None
+
+
+def _reset_nudges_for_round(game, round_number):
+    game.players.update(nudge_meter=100, nudge_meter_round=round_number)
+
+
+def _ensure_player_nudge_round(player, round_number):
+    if player.nudge_meter_round != round_number:
+        player.nudge_meter = 100
+        player.nudge_meter_round = round_number
+        player.save(update_fields=['nudge_meter', 'nudge_meter_round'])
+
+
+def _record_hint_and_progress(game, player, hint_word):
+    hint, created = Hint.objects.get_or_create(
+        game=game,
+        player=player,
+        round_number=game.current_round,
+        defaults={'word': hint_word}
+    )
+    if not created:
+        hint.word = hint_word
+        hint.save()
+
+    game.next_player()
+
+    active_players = list(game.get_active_players())
+    active_count = len(active_players) if active_players else 0
+    hints_this_round = Hint.objects.filter(game=game, round_number=game.current_round).count()
+
+    if active_count == 0:
+        return
+
+    if hints_this_round >= active_count:
+        if game.current_round < 3:
+            game.current_round += 1
+            active_players = list(game.get_active_players())
+            if active_players:
+                game.current_player_index = random.randint(0, len(active_players) - 1)
+            _reset_nudges_for_round(game, game.current_round)
+        else:
+            game.status = 'voting'
+            game.current_round += 1
+            game.current_player_index = 0
+            _reset_nudges_for_round(game, game.current_round)
+    game.save()
+
+
 def _serialize_game_state(game, is_spectator, player_name=None):
     players_qs = game.players.select_related('word').all()
     players_list = sort_players_for_display(game.code, players_qs)
@@ -324,6 +388,8 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             'is_creator': player.is_creator,
             'role': role_value,
             'word': word_text,
+            'nudge_meter': player.nudge_meter,
+            'nudge_meter_round': player.nudge_meter_round,
         })
 
     hints_data = [
@@ -338,14 +404,21 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         .order_by('round_number', 'created_at')
     ]
 
+    current_round_votes = Vote.objects.filter(game=game, round_number=game.current_round)
     votes_data = [
         {
             'voter_name': vote.voter.name,
             'target_name': vote.target.name,
         }
-        for vote in Vote.objects.filter(game=game, round_number=game.current_round)
-        .select_related('voter', 'target')
+        for vote in current_round_votes.select_related('voter', 'target')
     ]
+
+    vote_history = {}
+    for vote in Vote.objects.filter(game=game).select_related('voter', 'target').order_by('round_number', 'created_at'):
+        vote_history.setdefault(vote.round_number, []).append({
+            'voter_name': vote.voter.name,
+            'target_name': vote.target.name,
+        })
 
     # Get pending nudges for this player
     nudges_data = []
@@ -355,7 +428,8 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             pending_nudges = Nudge.objects.filter(
                 game=game,
                 to_player=current_player,
-                acknowledged=False
+                acknowledged=False,
+                round_number=game.current_round
             ).select_related('from_player')
             
             nudges_data = [
@@ -387,17 +461,22 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         'num_whitemen': game.num_whitemen,
         'citizen_word': None,
         'impostor_word': None,
+        'nudge_meter_max': 100,
     }
 
     if not is_spectator:
         game_data['citizen_word'] = game.citizen_word.text if game.citizen_word else None
         game_data['impostor_word'] = game.impostor_word.text if game.impostor_word else None
+        if game.status == 'finished':
+            game_data['actual_num_impostors'] = game.actual_num_impostors
+            game_data['actual_num_whitemen'] = game.actual_num_whitemen
 
     return {
         'game': game_data,
         'players': players_data,
         'hints': hints_data,
         'votes': votes_data,
+        'vote_history': vote_history,
         'nudges': nudges_data,
     }
 
@@ -498,6 +577,7 @@ def start_game_api(request, code):
     if active_players:
         game.current_player_index = random.randint(0, len(active_players) - 1)
     game.save()
+    _reset_nudges_for_round(game, game.current_round)
     return JsonResponse({'success': True})
 
 
@@ -526,32 +606,7 @@ def submit_hint_api(request, code):
     if current_player != player:
         return _json_error('Não é sua vez', status=403)
 
-    hint, created = Hint.objects.get_or_create(
-        game=game,
-        player=player,
-        round_number=game.current_round,
-        defaults={'word': hint_word}
-    )
-    if not created:
-        hint.word = hint_word
-        hint.save()
-
-    game.next_player()
-
-    active_players = list(game.get_active_players())
-    hints_this_round = Hint.objects.filter(game=game, round_number=game.current_round).count()
-
-    if hints_this_round >= len(active_players):
-        if game.current_round < 3:
-            game.current_round += 1
-            active_players = list(game.get_active_players())
-            if active_players:
-                game.current_player_index = random.randint(0, len(active_players) - 1)
-        else:
-            game.status = 'voting'
-            game.current_round += 1
-            game.current_player_index = 0
-    game.save()
+    _record_hint_and_progress(game, player, hint_word)
     return JsonResponse({'success': True})
 
 
@@ -615,9 +670,12 @@ def restart_game_api(request, code):
             participant.is_eliminated = False
             participant.role = None
             participant.word_id = None
+            participant.nudge_meter = 100
+            participant.nudge_meter_round = 0
             participant.save()
         Hint.objects.filter(game=locked_game).delete()
         Vote.objects.filter(game=locked_game).delete()
+        Nudge.objects.filter(game=locked_game).delete()
         locked_game.status = 'waiting'
         locked_game.current_round = 0
         locked_game.current_player_index = 0
@@ -627,7 +685,11 @@ def restart_game_api(request, code):
         locked_game.impostor_word_id = None
         locked_game.started_at = None
         locked_game.finished_at = None
+        locked_game.actual_num_impostors = 0
+        locked_game.actual_num_whitemen = 0
         locked_game.save()
+
+    _reset_nudges_for_round(game, 0)
 
     return JsonResponse({'success': True})
 
@@ -698,6 +760,9 @@ def nudge_player_api(request, code):
     if not player:
         return _json_error('Não autorizado', status=403)
 
+    if game.status != 'hints':
+        return _json_error('Nudges só podem ser enviados durante a rodada de dicas', status=400)
+
     target_name = payload.get('target_player_name')
     if not target_name:
         return _json_error('Jogador alvo não especificado')
@@ -710,14 +775,37 @@ def nudge_player_api(request, code):
     if target.name == player.name:
         return _json_error('Você não pode enviar nudge para si mesmo')
 
-    # Create nudge notification
+    one_second_ago = timezone.now() - timedelta(seconds=1)
+    recent_nudge = (
+        Nudge.objects.filter(game=game, from_player=player, to_player=target, created_at__gte=one_second_ago)
+        .order_by('-created_at')
+        .first()
+    )
+    if recent_nudge:
+        return _json_error('Espere 1 segundo para enviar outro nudge para este jogador', status=429)
+
+    _ensure_player_nudge_round(target, game.current_round)
+
     Nudge.objects.create(
         game=game,
         from_player=player,
-        to_player=target
+        to_player=target,
+        round_number=game.current_round
     )
 
-    return JsonResponse({'success': True})
+    target.nudge_meter = max(0, target.nudge_meter - 1)
+    target.save(update_fields=['nudge_meter'])
+
+    skip_triggered = False
+    if target.nudge_meter <= 0 and game.get_current_player() == target:
+        skip_triggered = True
+        _record_hint_and_progress(game, target, 'Zerei o HP... perdi minha vez!')
+
+    return JsonResponse({
+        'success': True,
+        'nudge_meter': target.nudge_meter,
+        'skip_triggered': skip_triggered
+    })
 
 
 
