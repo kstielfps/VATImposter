@@ -737,12 +737,26 @@ function updateGameState(state) {
     }
 
     const votingSection = document.getElementById('voting-section');
+    const voteTallies = state.vote_tallies || {};
+    const currentRoundTally = voteTallies[game.current_round] || {};
+    
     if (!isSpectator && game.status === 'voting') {
         votingSection.style.display = 'block';
         const activePlayers = players.filter(p => !p.is_eliminated && p.name !== playerName);
         const voteButtons = document.getElementById('vote-buttons');
-        voteButtons.innerHTML = activePlayers.map(p => {
-            const hasVoted = votes.some(v => v.voter_name === playerName);
+        const hasVoted = votes.some(v => v.voter_name === playerName);
+        
+        // Show current vote counts if available
+        let tallyDisplay = '';
+        if (Object.keys(currentRoundTally).length > 0) {
+            const sortedTally = Object.entries(currentRoundTally)
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, count]) => `${name}: ${count} voto${count > 1 ? 's' : ''}`)
+                .join(' | ');
+            tallyDisplay = `<p style="margin: 10px 0; color: var(--text-300); font-size: 0.9rem;">📊 ${sortedTally}</p>`;
+        }
+        
+        voteButtons.innerHTML = tallyDisplay + activePlayers.map(p => {
             return `<button class="vote-button ${hasVoted ? 'voted' : ''}" 
                     data-target="${p.name}" 
                     ${hasVoted ? 'disabled' : ''}>

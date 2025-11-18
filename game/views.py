@@ -414,11 +414,14 @@ def _serialize_game_state(game, is_spectator, player_name=None):
     ]
 
     vote_history = {}
+    vote_tallies = {}
     for vote in Vote.objects.filter(game=game).select_related('voter', 'target').order_by('round_number', 'created_at'):
         vote_history.setdefault(vote.round_number, []).append({
             'voter_name': vote.voter.name,
             'target_name': vote.target.name,
         })
+        vote_tallies.setdefault(vote.round_number, {})
+        vote_tallies[vote.round_number][vote.target.name] = vote_tallies[vote.round_number].get(vote.target.name, 0) + 1
 
     # Get pending nudges for this player
     nudges_data = []
@@ -477,6 +480,7 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         'hints': hints_data,
         'votes': votes_data,
         'vote_history': vote_history,
+        'vote_tallies': vote_tallies,
         'nudges': nudges_data,
     }
 
@@ -491,6 +495,7 @@ def _process_voting(game):
         target_id = vote.target.id
         vote_count[target_id] = vote_count.get(target_id, 0) + 1
 
+    eliminated_player_id = None
     if vote_count:
         max_votes = max(vote_count.values())
         most_voted_ids = [pid for pid, count in vote_count.items() if count == max_votes]
@@ -499,6 +504,7 @@ def _process_voting(game):
             if not eliminated_player.is_eliminated:
                 eliminated_player.is_eliminated = True
                 eliminated_player.save()
+                eliminated_player_id = eliminated_player.id
 
     game.refresh_from_db()
     winner = game.check_win_conditions()
@@ -515,6 +521,7 @@ def _process_voting(game):
             game.status = 'finished'
             game.finished_at = timezone.now()
     game.save()
+    return eliminated_player_id, vote_count
 
 
 def _remaining_auto_delete_seconds(game):
@@ -643,10 +650,19 @@ def submit_vote_api(request, code):
 
     active_players = list(game.get_active_players())
     votes_count = Vote.objects.filter(game=game, round_number=game.current_round).count()
+    
+    vote_result = None
     if votes_count >= len(active_players):
-        _process_voting(game)
+        eliminated_id, vote_count = _process_voting(game)
+        vote_result = {
+            'eliminated_player_id': eliminated_id,
+            'vote_counts': {
+                Player.objects.get(id=pid).name: count 
+                for pid, count in vote_count.items()
+            }
+        }
 
-    return JsonResponse({'success': True})
+    return JsonResponse({'success': True, 'vote_result': vote_result})
 
 
 @csrf_exempt
