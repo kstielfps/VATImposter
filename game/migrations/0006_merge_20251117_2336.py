@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('game', '0003_z_add_actual_counts_and_nudge_fields'),
+        ('game', '0003_add_actual_counts_and_nudge_fields'),
         ('game', '0004_actual_counts_and_nudge_fields'),
         ('game', '0005_nudge_meter_hp_defaults'),
     ]
