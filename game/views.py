@@ -875,65 +875,82 @@ def use_chaos_power_api(request, code):
         return _json_error('Palhaço eliminado não pode usar poderes', status=400)
     if player.palhaco_goal_state != 'eliminate':
         return _json_error('Você precisa encontrar todos os impostores primeiro', status=400)
-    if player.palhaco_used_chaos_power:
-        return _json_error('Você já usou este poder', status=400)
+    
+    # Verificar se já usou (com tratamento para campo que pode não existir)
+    try:
+        if player.palhaco_used_chaos_power:
+            return _json_error('Você já usou este poder', status=400)
+    except AttributeError:
+        # Campo não existe no banco (migração não aplicada)
+        return _json_error('Poder de caos não disponível. Aguarde atualização do servidor.', status=503)
 
-    with transaction.atomic():
-        locked_game = Game.objects.select_for_update().get(id=game.id)
-        
-        # Obter todos os grupos de palavras disponíveis
-        all_groups = list(WordGroup.objects.filter(words__isnull=False).distinct())
-        if len(all_groups) < 2:
-            return _json_error('Não há grupos de palavras suficientes para embaralhar', status=400)
-        
-        # Escolher novo grupo para cidadãos/impostores (diferente do atual)
-        available_groups = [g for g in all_groups if g.id != locked_game.word_group_id]
-        new_citizen_group = random.choice(available_groups if available_groups else all_groups)
-        
-        citizen_words = list(new_citizen_group.words.all())
-        if len(citizen_words) < 2:
-            return _json_error('Grupo escolhido não tem palavras suficientes', status=400)
-        
-        # Escolher novas palavras para cidadão e impostor
-        new_citizen_word = random.choice(citizen_words)
-        remaining = [w for w in citizen_words if w != new_citizen_word]
-        new_impostor_word = random.choice(remaining) if remaining else new_citizen_word
-        
-        # Escolher novo grupo para WhiteMan (diferente dos grupos de cidadão/impostor)
-        whiteman_groups = [g for g in all_groups if g.id != new_citizen_group.id]
-        new_whiteman_group = random.choice(whiteman_groups if whiteman_groups else all_groups)
-        
-        # Atualizar o jogo
-        locked_game.word_group = new_citizen_group
-        locked_game.citizen_word = new_citizen_word
-        locked_game.impostor_word = new_impostor_word
-        locked_game.whiteman_word_group = new_whiteman_group
-        locked_game.save()
-        
-        # Atualizar palavras de todos os jogadores ativos
-        active_players = locked_game.players.filter(is_eliminated=False)
-        for p in active_players:
-            if p.role == 'citizen':
-                p.word = new_citizen_word
-                p.save(update_fields=['word'])
-            elif p.role == 'impostor':
-                p.word = new_impostor_word
-                p.impostor_knows_clown = True  # Revelar Palhaço ao impostor
-                p.save(update_fields=['word', 'impostor_knows_clown'])
-            elif p.role == 'whiteman':
-                whiteman_words = list(new_whiteman_group.words.all())
-                if whiteman_words:
-                    p.word = random.choice(whiteman_words)
+    try:
+        with transaction.atomic():
+            locked_game = Game.objects.select_for_update().get(id=game.id)
+            
+            # Obter todos os grupos de palavras disponíveis
+            all_groups = list(WordGroup.objects.filter(words__isnull=False).distinct())
+            if len(all_groups) < 2:
+                return _json_error('Não há grupos de palavras suficientes para embaralhar', status=400)
+            
+            # Escolher novo grupo para cidadãos/impostores (diferente do atual)
+            available_groups = [g for g in all_groups if g.id != locked_game.word_group_id]
+            new_citizen_group = random.choice(available_groups if available_groups else all_groups)
+            
+            citizen_words = list(new_citizen_group.words.all())
+            if len(citizen_words) < 2:
+                return _json_error('Grupo escolhido não tem palavras suficientes', status=400)
+            
+            # Escolher novas palavras para cidadão e impostor
+            new_citizen_word = random.choice(citizen_words)
+            remaining = [w for w in citizen_words if w != new_citizen_word]
+            new_impostor_word = random.choice(remaining) if remaining else new_citizen_word
+            
+            # Escolher novo grupo para WhiteMan (diferente dos grupos de cidadão/impostor)
+            whiteman_groups = [g for g in all_groups if g.id != new_citizen_group.id]
+            new_whiteman_group = random.choice(whiteman_groups if whiteman_groups else all_groups)
+            
+            # Atualizar o jogo
+            locked_game.word_group = new_citizen_group
+            locked_game.citizen_word = new_citizen_word
+            locked_game.impostor_word = new_impostor_word
+            locked_game.whiteman_word_group = new_whiteman_group
+            locked_game.save()
+            
+            # Atualizar palavras de todos os jogadores ativos
+            active_players = locked_game.players.filter(is_eliminated=False)
+            for p in active_players:
+                if p.role == 'citizen':
+                    p.word = new_citizen_word
                     p.save(update_fields=['word'])
-            elif p.role == 'clown':
-                p.word = new_impostor_word
-                p.palhaco_used_chaos_power = True
-                p.save(update_fields=['word', 'palhaco_used_chaos_power'])
-        
-    return JsonResponse({
-        'success': True,
-        'message': '🎭 CAOS! Todas as palavras foram embaralhadas! Os impostores agora sabem quem você é.',
-    })
+                elif p.role == 'impostor':
+                    p.word = new_impostor_word
+                    try:
+                        p.impostor_knows_clown = True  # Revelar Palhaço ao impostor
+                        p.save(update_fields=['word', 'impostor_knows_clown'])
+                    except Exception:
+                        p.save(update_fields=['word'])
+                elif p.role == 'whiteman':
+                    whiteman_words = list(new_whiteman_group.words.all())
+                    if whiteman_words:
+                        p.word = random.choice(whiteman_words)
+                        p.save(update_fields=['word'])
+                elif p.role == 'clown':
+                    p.word = new_impostor_word
+                    try:
+                        p.palhaco_used_chaos_power = True
+                        p.save(update_fields=['word', 'palhaco_used_chaos_power'])
+                    except Exception:
+                        p.save(update_fields=['word'])
+            
+        return JsonResponse({
+            'success': True,
+            'message': '🎭 CAOS! Todas as palavras foram embaralhadas! Os impostores agora sabem quem você é.',
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return _json_error(f'Erro ao usar poder: {str(e)}', status=500)
 
 
 @csrf_exempt
