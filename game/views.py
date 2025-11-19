@@ -889,26 +889,33 @@ def use_chaos_power_api(request, code):
             locked_game = Game.objects.select_for_update().get(id=game.id)
             
             # Obter todos os grupos de palavras disponíveis
-            all_groups = list(WordGroup.objects.filter(words__isnull=False).distinct())
-            if len(all_groups) < 2:
-                return _json_error('Não há grupos de palavras suficientes para embaralhar', status=400)
+            all_groups = list(WordGroup.objects.prefetch_related('words').filter(words__isnull=False).distinct())
+            if len(all_groups) < 1:
+                return _json_error('Não há grupos de palavras cadastrados no sistema', status=400)
             
-            # Escolher novo grupo para cidadãos/impostores (diferente do atual)
-            available_groups = [g for g in all_groups if g.id != locked_game.word_group_id]
-            new_citizen_group = random.choice(available_groups if available_groups else all_groups)
+            # Se há apenas 1 grupo, usar o mesmo (mas trocar as palavras)
+            if len(all_groups) < 2:
+                new_citizen_group = all_groups[0]
+            else:
+                # Escolher novo grupo para cidadãos/impostores (diferente do atual se possível)
+                available_groups = [g for g in all_groups if g.id != locked_game.word_group_id]
+                new_citizen_group = random.choice(available_groups if available_groups else all_groups)
             
             citizen_words = list(new_citizen_group.words.all())
             if len(citizen_words) < 2:
-                return _json_error('Grupo escolhido não tem palavras suficientes', status=400)
+                return _json_error('Grupo escolhido não tem palavras suficientes (mínimo 2)', status=400)
             
             # Escolher novas palavras para cidadão e impostor
             new_citizen_word = random.choice(citizen_words)
-            remaining = [w for w in citizen_words if w != new_citizen_word]
+            remaining = [w for w in citizen_words if w.id != new_citizen_word.id]
             new_impostor_word = random.choice(remaining) if remaining else new_citizen_word
             
-            # Escolher novo grupo para WhiteMan (diferente dos grupos de cidadão/impostor)
-            whiteman_groups = [g for g in all_groups if g.id != new_citizen_group.id]
-            new_whiteman_group = random.choice(whiteman_groups if whiteman_groups else all_groups)
+            # Escolher novo grupo para WhiteMan (diferente dos grupos de cidadão/impostor se possível)
+            if len(all_groups) > 1:
+                whiteman_groups = [g for g in all_groups if g.id != new_citizen_group.id]
+                new_whiteman_group = random.choice(whiteman_groups) if whiteman_groups else all_groups[0]
+            else:
+                new_whiteman_group = all_groups[0]
             
             # Atualizar o jogo
             locked_game.word_group = new_citizen_group
@@ -949,7 +956,8 @@ def use_chaos_power_api(request, code):
         })
     except Exception as e:
         import traceback
-        traceback.print_exc()
+        error_trace = traceback.format_exc()
+        print(f"ERRO CHAOS POWER: {error_trace}")
         return _json_error(f'Erro ao usar poder: {str(e)}', status=500)
 
 
