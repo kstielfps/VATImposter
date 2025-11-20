@@ -12,7 +12,7 @@ import traceback
 import os
 import logging
 import random
-from .models import Game, Player, Hint, Vote, Nudge, sort_players_for_display
+from .models import Game, Player, Hint, Vote, Nudge, WordGroup, Word, sort_players_for_display
 
 User = get_user_model()
 
