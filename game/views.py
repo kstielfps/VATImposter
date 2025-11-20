@@ -807,15 +807,21 @@ def submit_palhaco_guess_api(request, code):
 
     # Verificar se já completou todos os palpites desta rodada
     total_impostors = game.actual_num_impostors or game.num_impostors
-    current_guesses = Vote.objects.filter(
+    existing_guesses = Vote.objects.filter(
         game=game,
         voter=player,
         round_number=game.current_round,
         is_palhaco_guess=True,
-    ).count()
+    ).select_related('target')
+    
+    current_guesses = existing_guesses.count()
     
     if current_guesses >= total_impostors:
         return _json_error('Você já fez todos os palpites desta rodada')
+    
+    # Verificar se já votou neste jogador nesta rodada (evitar duplicatas)
+    if existing_guesses.filter(target=target).exists():
+        return _json_error(f'Você já apostou em {target.name} nesta rodada')
 
     Vote.objects.create(
         game=game,
