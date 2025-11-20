@@ -823,13 +823,18 @@ def submit_palhaco_guess_api(request, code):
     if existing_guesses.filter(target=target).exists():
         return _json_error(f'Você já apostou em {target.name} nesta rodada')
 
-    Vote.objects.create(
+    # Usar get_or_create para evitar duplicatas devido a race conditions
+    vote, created = Vote.objects.get_or_create(
         game=game,
         voter=player,
         target=target,
         round_number=game.current_round,
         is_palhaco_guess=True,
     )
+    
+    if not created:
+        # Voto já existia (duplo clique ou race condition)
+        return _json_error(f'Você já apostou em {target.name} nesta rodada')
 
     # Contar quantos palpites já foram feitos nesta rodada (incluindo este)
     total_guesses = current_guesses + 1

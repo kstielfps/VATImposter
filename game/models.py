@@ -325,7 +325,10 @@ class Vote(models.Model):
     class Meta:
         verbose_name = "Voto"
         verbose_name_plural = "Votos"
-        unique_together = [['game', 'voter', 'round_number', 'is_palhaco_guess']]
+        # Permitir múltiplos palpites do Palhaço, mas um voto de eliminação por rodada
+        # Palhaço pode fazer N palpites (um por impostor) na mesma rodada
+        # Mas cada combinação de voter+target+round+tipo deve ser única
+        unique_together = [['game', 'voter', 'target', 'round_number', 'is_palhaco_guess']]
 
 
 class Nudge(models.Model):
