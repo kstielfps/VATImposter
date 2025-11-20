@@ -862,9 +862,9 @@ def submit_palhaco_guess_api(request, code):
     # IDs dos jogadores que o Palhaço apostou
     guessed_ids = set(vote.target.id for vote in guesses_this_round)
     
-    # IDs dos impostores reais
+    # IDs dos impostores reais (incluindo eliminados - Palhaço deve adivinhar todos)
     real_impostor_ids = set(
-        Player.objects.filter(game=game, role='impostor', is_eliminated=False)
+        Player.objects.filter(game=game, role='impostor')
         .values_list('id', flat=True)
     )
     
