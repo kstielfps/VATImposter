@@ -519,21 +519,23 @@ def _serialize_game_state(game, is_spectator, player_name=None):
         known_players = list(Player.objects.filter(id__in=known_ids)) if known_ids else []
         total_impostors = game.actual_num_impostors or game.num_impostors
         
-        # Verificar se já fez palpite nesta rodada
-        already_guessed_this_round = Vote.objects.filter(
+        # Contar quantos palpites já foram feitos nesta rodada
+        guesses_count = Vote.objects.filter(
             game=game,
             voter=viewer_player,
             round_number=game.current_round,
             is_palhaco_guess=True
-        ).exists()
+        ).count()
         
+        # Pode fazer palpite se ainda não completou todos os palpites necessários
         can_guess = (
             game.status == 'voting' and
             not viewer_player.is_eliminated and
             viewer_player.palhaco_goal_state in ['', 'finding', 'pending'] and
-            len(known_ids) < total_impostors and
-            not already_guessed_this_round
+            guesses_count < total_impostors
         )
+        
+        already_completed_guesses = guesses_count >= total_impostors
         
         can_use_chaos_power = (
             viewer_player.palhaco_goal_state == 'eliminate' and
@@ -549,7 +551,9 @@ def _serialize_game_state(game, is_spectator, player_name=None):
             'total_impostors': total_impostors,
             'remaining_impostors': max(0, total_impostors - len(known_ids)),
             'can_guess': can_guess,
-            'already_guessed_this_round': already_guessed_this_round,
+            'already_guessed_this_round': already_completed_guesses,
+            'guesses_made': guesses_count,
+            'guesses_remaining': max(0, total_impostors - guesses_count),
             'goal_ready_round': viewer_player.palhaco_goal_ready_round,
             'needs_elimination': viewer_player.palhaco_goal_state == 'eliminate',
             'can_use_chaos_power': can_use_chaos_power,
@@ -801,14 +805,17 @@ def submit_palhaco_guess_api(request, code):
     if target.name == player.name:
         return _json_error('Você não pode se acusar')
 
-    if Vote.objects.filter(
+    # Verificar se já completou todos os palpites desta rodada
+    total_impostors = game.actual_num_impostors or game.num_impostors
+    current_guesses = Vote.objects.filter(
         game=game,
         voter=player,
-        target=target,
         round_number=game.current_round,
         is_palhaco_guess=True,
-    ).exists():
-        return _json_error('Você já testou esse jogador nesta rodada')
+    ).count()
+    
+    if current_guesses >= total_impostors:
+        return _json_error('Você já fez todos os palpites desta rodada')
 
     Vote.objects.create(
         game=game,
@@ -818,39 +825,60 @@ def submit_palhaco_guess_api(request, code):
         is_palhaco_guess=True,
     )
 
-    known_ids = set(player.palhaco_known_impostors or [])
+    # Contar quantos palpites já foram feitos nesta rodada (incluindo este)
+    total_guesses = current_guesses + 1
+    
     total_impostors = game.actual_num_impostors or game.num_impostors
-    correct = target.role == 'impostor'
-    message = ''
-    update_fields = []
-
-    if correct and target.id not in known_ids:
-        known_ids.add(target.id)
-        player.palhaco_known_impostors = list(known_ids)
-        update_fields.append('palhaco_known_impostors')
-        if len(known_ids) >= total_impostors:
-            player.palhaco_goal_state = 'eliminate'
-            player.palhaco_goal_ready_round = game.current_round
-            update_fields.extend(['palhaco_goal_state', 'palhaco_goal_ready_round'])
-            message = '🎭 Você descobriu todos os impostores! Agora precisa ser eliminado para vencer sozinho.'
-        else:
-            remaining = total_impostors - len(known_ids)
-            message = f'✅ {target.name} é impostor! Falta descobrir {remaining}.'
-    elif correct:
-        message = f'Você já sabia que {target.name} é impostor.'
+    
+    # Se ainda não fez todos os palpites necessários
+    if total_guesses < total_impostors:
+        remaining = total_impostors - total_guesses
+        return JsonResponse({
+            'success': True,
+            'message': f'🎭 Palpite registrado. Faltam {remaining} palpite(s) para revelar o resultado.',
+            'remaining_guesses': remaining,
+            'waiting_result': True,
+        })
+    
+    # Se completou todos os palpites, verificar se acertou TODOS
+    guesses_this_round = Vote.objects.filter(
+        game=game,
+        voter=player,
+        round_number=game.current_round,
+        is_palhaco_guess=True,
+    ).select_related('target')
+    
+    # IDs dos jogadores que o Palhaço apostou
+    guessed_ids = set(vote.target.id for vote in guesses_this_round)
+    
+    # IDs dos impostores reais
+    real_impostor_ids = set(
+        Player.objects.filter(game=game, role='impostor', is_eliminated=False)
+        .values_list('id', flat=True)
+    )
+    
+    # Verificar se acertou TODOS os impostores (e não chutou ninguém errado)
+    if guessed_ids == real_impostor_ids:
+        # ACERTOU TODOS!
+        player.palhaco_known_impostors = list(real_impostor_ids)
+        player.palhaco_goal_state = 'eliminate'
+        player.palhaco_goal_ready_round = game.current_round
+        player.save(update_fields=['palhaco_known_impostors', 'palhaco_goal_state', 'palhaco_goal_ready_round'])
+        
+        return JsonResponse({
+            'success': True,
+            'message': '🎉 PARABÉNS! Você descobriu TODOS os impostores! Agora precisa ser eliminado para vencer sozinho.',
+            'all_correct': True,
+            'remaining_guesses': 0,
+        })
     else:
-        message = f'❌ {target.name} não é impostor.'
-
-    if update_fields:
-        player.save(update_fields=update_fields)
-
-    remaining_impostors = max(0, total_impostors - len(known_ids))
-    return JsonResponse({
-        'success': True,
-        'correct': correct,
-        'message': message,
-        'remaining_impostors': remaining_impostors,
-    })
+        # ERROU algum (ou todos)
+        return JsonResponse({
+            'success': True,
+            'message': '❌ Você errou! Não conseguiu identificar todos os impostores corretamente. Tente novamente na próxima rodada.',
+            'all_correct': False,
+            'remaining_guesses': 0,
+        })
 
 
 @csrf_exempt

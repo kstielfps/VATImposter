@@ -586,13 +586,16 @@ function updatePalhacoPanel(state, players) {
     const feedbackEl = document.getElementById('palhaco-feedback');
 
     const remaining = palhacoData.remaining_impostors ?? Math.max(0, (palhacoData.total_impostors || 0) - (palhacoData.known_count || 0));
+    const guessesRemaining = palhacoData.guesses_remaining ?? 0;
     let statusCopy = '';
     if (palhacoData.needs_elimination) {
         statusCopy = 'Você já encontrou todos os impostores. Agora tente ser eliminado para vencer sozinho!';
+    } else if (guessesRemaining > 0 && palhacoData.can_guess) {
+        statusCopy = `Faça ${guessesRemaining} palpite(s) para descobrir todos os impostores. Só saberá o resultado após completar todos!`;
     } else if (remaining > 0) {
-        statusCopy = `Descubra ${remaining} impostor${remaining === 1 ? '' : 'es'} em segredo.`;
+        statusCopy = `Tente descobrir os ${remaining} impostor${remaining === 1 ? '' : 'es'} na próxima rodada de votação.`;
     } else {
-        statusCopy = 'Continue analisando as pistas e votes para encontrar impostores.';
+        statusCopy = 'Continue analisando as pistas e votos para encontrar impostores.';
     }
     statusEl.textContent = statusCopy;
 
@@ -677,18 +680,30 @@ function updatePalhacoPanel(state, players) {
                     });
                     if (response && response.message) {
                         feedbackEl.textContent = response.message;
+                        
+                        // Se ainda tem palpites restantes, reabilita após 1 segundo
+                        if (response.waiting_result && response.remaining_guesses > 0) {
+                            setTimeout(() => {
+                                guessBtn.disabled = false;
+                                guessSelect.value = '';
+                            }, 1000);
+                        } else {
+                            // Resultado final - atualizar o estado
+                            setTimeout(() => fetchGameState(true), 1000);
+                        }
                     } else {
                         feedbackEl.textContent = 'Palpite registrado!';
                     }
                 } catch (error) {
                     feedbackEl.textContent = error.message || 'Erro ao enviar palpite.';
+                    guessBtn.disabled = false;
                 }
             };
         }
     } else {
         guessSection.style.display = 'none';
         if (palhacoData.already_guessed_this_round) {
-            feedbackEl.textContent = 'Você já fez seu palpite nesta rodada. Aguarde a próxima votação.';
+            feedbackEl.textContent = 'Você já fez todos os palpites desta rodada. Aguarde a próxima votação.';
         }
     }
 }
